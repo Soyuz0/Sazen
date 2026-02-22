@@ -31,6 +31,9 @@ const DEFAULT_OPTIONS: Required<
     | "headed"
     | "deterministic"
     | "slowMoMs"
+    | "stabilityProfile"
+    | "screenshotMode"
+    | "redactionPack"
     | "viewportWidth"
     | "viewportHeight"
     | "actionTimeoutMs"
@@ -42,6 +45,9 @@ const DEFAULT_OPTIONS: Required<
   headed: true,
   deterministic: true,
   slowMoMs: 0,
+  stabilityProfile: "balanced",
+  screenshotMode: "viewport",
+  redactionPack: "default",
   viewportWidth: 1440,
   viewportHeight: 920,
   actionTimeoutMs: 10_000,
@@ -110,7 +116,9 @@ export class AgentSession {
       await applyDeterministicSettings(this.page, defaultDeterministicOptions);
     }
 
-    const redaction = this.options.logRedactionPatterns ?? defaultRedactionPatterns();
+    const redaction =
+      this.options.logRedactionPatterns ??
+      defaultRedactionPatterns(this.options.redactionPack ?? DEFAULT_OPTIONS.redactionPack);
     this.observer = new BrowserObserver(
       this.context,
       this.page,
@@ -145,7 +153,7 @@ export class AgentSession {
     try {
       const execution = await this.executeAction(action, preSnapshot);
       resolvedNodeId = execution.resolvedNodeId;
-      await this.waitForStability(getActionTimeout(action));
+      await this.waitForStability(action, getActionTimeout(action));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       status = isRetryableError(message) ? "retryable_error" : "fatal_error";
@@ -220,7 +228,7 @@ export class AgentSession {
         postUrl: result.postSnapshot.url,
         postTitle: result.postSnapshot.title,
         postInteractiveCount: result.postSnapshot.interactiveCount,
-        waitForSelector: action.type === "waitFor" && action.condition.kind === "selector" ? action.condition.selector : undefined,
+        waitForSelector: extractSelectorInvariant(action),
         networkErrorCount: result.events.filter(
           (event) => event.kind === "network" && event.phase === "request_failed"
         ).length,
@@ -379,6 +387,16 @@ export class AgentSession {
 
       case "press": {
         await page.keyboard.press(action.key);
+        return {};
+      }
+
+      case "assert": {
+        await this.runAssertAction(action);
+        return {};
+      }
+
+      case "handleConsent": {
+        await this.handleConsent(action);
         return {};
       }
 
@@ -588,6 +606,161 @@ export class AgentSession {
     );
   }
 
+  private async runAssertAction(action: Extract<Action, { type: "assert" }>): Promise<void> {
+    const page = this.requirePage();
+    const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
+
+    if (action.condition.kind === "selector") {
+      const state = action.condition.state ?? "visible";
+      const locator = page.locator(action.condition.selector).first();
+      await locator.waitFor({ state, timeout });
+
+      if (action.condition.textContains) {
+        const text = await locator.innerText({ timeout });
+        if (!text.includes(action.condition.textContains)) {
+          throw new Error(
+            `Assert failed: selector '${action.condition.selector}' text does not include '${action.condition.textContains}'`
+          );
+        }
+      }
+
+      return;
+    }
+
+    if (action.condition.kind === "selector_bbox_min") {
+      const condition = action.condition;
+      const selector = condition.selector;
+      const locator = page.locator(selector);
+      await locator.first().waitFor({ state: "attached", timeout });
+      const boxes = await locator.evaluateAll((elements) =>
+        elements
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              width: rect.width,
+              height: rect.height,
+              visible:
+                rect.width > 0 &&
+                rect.height > 0 &&
+                getComputedStyle(element).display !== "none" &&
+                getComputedStyle(element).visibility !== "hidden"
+            };
+          })
+          .filter((entry) => entry.visible)
+      );
+
+      const passing = boxes.filter(
+        (entry) => entry.width >= condition.minWidth && entry.height >= condition.minHeight
+      ).length;
+      const requiredCount = condition.requireCount ?? 1;
+
+      if (passing < requiredCount) {
+        throw new Error(
+          `Assert failed: selector '${selector}' has ${passing} visible nodes meeting min bbox ${condition.minWidth}x${condition.minHeight} (required ${requiredCount})`
+        );
+      }
+
+      return;
+    }
+
+    if (action.condition.kind === "selector_overlap_max") {
+      const [boxA, boxB] = await Promise.all([
+        page.locator(action.condition.selectorA).first().boundingBox(),
+        page.locator(action.condition.selectorB).first().boundingBox()
+      ]);
+
+      if (!boxA || !boxB) {
+        throw new Error(
+          `Assert failed: unable to get bounding boxes for '${action.condition.selectorA}' and '${action.condition.selectorB}'`
+        );
+      }
+
+      const overlapRatio = calculateOverlapRatio(boxA, boxB);
+      if (overlapRatio > action.condition.maxOverlapRatio) {
+        throw new Error(
+          `Assert failed: overlap ratio ${overlapRatio.toFixed(3)} exceeds max ${action.condition.maxOverlapRatio.toFixed(3)}`
+        );
+      }
+
+      return;
+    }
+
+    if (action.condition.kind === "url_contains") {
+      await page.waitForFunction(
+        (needle) => window.location.href.includes(needle),
+        action.condition.value,
+        { timeout }
+      );
+      return;
+    }
+
+    await page.waitForFunction(
+      (needle) => document.title.toLowerCase().includes(String(needle).toLowerCase()),
+      action.condition.value,
+      { timeout }
+    );
+  }
+
+  private async handleConsent(action: Extract<Action, { type: "handleConsent" }>): Promise<void> {
+    const page = this.requirePage();
+    const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
+    const mode = action.mode ?? "accept";
+
+    const acceptNames = [
+      /accept/i,
+      /agree/i,
+      /allow all/i,
+      /allow cookies/i,
+      /ok/i,
+      /got it/i,
+      /continue/i
+    ];
+    const rejectNames = [/reject/i, /decline/i, /deny/i, /necessary only/i];
+
+    const names = mode === "accept" ? acceptNames : rejectNames;
+
+    const selectorCandidates = [
+      "button[data-testid*='accept']",
+      "button[id*='accept']",
+      "button[class*='accept']",
+      "button[aria-label*='accept' i]",
+      "button[data-testid*='reject']",
+      "button[id*='reject']",
+      "button[class*='reject']"
+    ];
+
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      for (const namePattern of names) {
+        const roleButton = page.getByRole("button", { name: namePattern }).first();
+        if (await roleButton.isVisible().catch(() => false)) {
+          await roleButton.click({ timeout: 1_500 });
+          return;
+        }
+
+        const roleLink = page.getByRole("link", { name: namePattern }).first();
+        if (await roleLink.isVisible().catch(() => false)) {
+          await roleLink.click({ timeout: 1_500 });
+          return;
+        }
+      }
+
+      for (const selector of selectorCandidates) {
+        const locator = page.locator(selector).first();
+        if (await locator.isVisible().catch(() => false)) {
+          await locator.click({ timeout: 1_500 });
+          return;
+        }
+      }
+
+      await page.waitForTimeout(250);
+    }
+
+    if (action.requireFound) {
+      throw new Error(`No consent control found for mode '${mode}' within ${timeout}ms`);
+    }
+  }
+
   private async runWaitCondition(condition: WaitCondition, timeoutMs?: number): Promise<void> {
     const page = this.requirePage();
     const timeout = timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
@@ -608,11 +781,13 @@ export class AgentSession {
     await page.waitForLoadState("networkidle", { timeout });
   }
 
-  private async waitForStability(timeoutMs?: number): Promise<void> {
+  private async waitForStability(action: Action, timeoutMs?: number): Promise<void> {
     const page = this.requirePage();
     const actionTimeout = timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
-    const quietWindowMs = this.options.stableWaitMs ?? DEFAULT_OPTIONS.stableWaitMs;
-    const networkIdleBudgetMs = computeNetworkIdleBudgetMs(actionTimeout, quietWindowMs);
+    const profile = this.options.stabilityProfile ?? DEFAULT_OPTIONS.stabilityProfile;
+    const baseQuietWindowMs = this.options.stableWaitMs ?? DEFAULT_OPTIONS.stableWaitMs;
+    const quietWindowMs = computeQuietWindowMs(profile, baseQuietWindowMs);
+    const networkIdleBudgetMs = computeNetworkIdleBudgetMs(profile, actionTimeout, quietWindowMs, action.type);
 
     await page.waitForTimeout(quietWindowMs);
     await page.waitForLoadState("networkidle", { timeout: networkIdleBudgetMs }).catch(() => undefined);
@@ -631,7 +806,10 @@ export class AgentSession {
     );
 
     await mkdir(dirname(filePath), { recursive: true });
-    await page.screenshot({ path: filePath, fullPage: true });
+    await page.screenshot({
+      path: filePath,
+      fullPage: (this.options.screenshotMode ?? DEFAULT_OPTIONS.screenshotMode) === "fullpage"
+    });
     return filePath;
   }
 
@@ -706,12 +884,27 @@ export class AgentSession {
   }
 }
 
-function defaultRedactionPatterns(): RegExp[] {
-  return [
+function defaultRedactionPatterns(pack: AgentSessionOptions["redactionPack"]): RegExp[] {
+  if (pack === "off") {
+    return [];
+  }
+
+  const base = [
     /bearer\s+[a-z0-9._-]+/gi,
     /("password"\s*:\s*")[^"]+"/gi,
     /(token=)[^&\s]+/gi,
     /(authorization:\s*)[^\s]+/gi
+  ];
+
+  if (pack !== "strict") {
+    return base;
+  }
+
+  return [
+    ...base,
+    /(set-cookie:\s*)[^\n]+/gi,
+    /(api[-_]?key\s*[=:]\s*)[^\s,;]+/gi,
+    /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/gi
   ];
 }
 
@@ -825,10 +1018,44 @@ function normalizeComparableText(input: string): string {
   return input.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-export function computeNetworkIdleBudgetMs(actionTimeoutMs: number, quietWindowMs: number): number {
-  const quarter = Math.floor(actionTimeoutMs / 4);
-  const floor = Math.max(quietWindowMs, 400);
-  return Math.min(2_000, Math.max(floor, quarter));
+export function computeQuietWindowMs(
+  profile: AgentSessionOptions["stabilityProfile"],
+  baseQuietWindowMs: number
+): number {
+  const effectiveProfile = profile ?? "balanced";
+  if (effectiveProfile === "fast") {
+    return Math.max(40, Math.floor(baseQuietWindowMs * 0.6));
+  }
+  if (effectiveProfile === "chatty") {
+    return Math.max(baseQuietWindowMs, 220);
+  }
+  return Math.max(baseQuietWindowMs, 120);
+}
+
+export function computeNetworkIdleBudgetMs(
+  profile: AgentSessionOptions["stabilityProfile"],
+  actionTimeoutMs: number,
+  quietWindowMs: number,
+  actionType: Action["type"]
+): number {
+  const effectiveProfile = profile ?? "balanced";
+
+  const base =
+    actionType === "navigate" || actionType === "waitFor"
+      ? Math.floor(actionTimeoutMs / 2)
+      : Math.floor(actionTimeoutMs / 4);
+
+  const floor = Math.max(quietWindowMs, 300);
+
+  if (effectiveProfile === "fast") {
+    return Math.min(1_200, Math.max(floor, Math.floor(base * 0.6)));
+  }
+
+  if (effectiveProfile === "chatty") {
+    return Math.min(4_000, Math.max(floor, Math.floor(base * 1.4)));
+  }
+
+  return Math.min(2_500, Math.max(floor, base));
 }
 
 function noteOriginFromUrl(origins: Set<string>, input: string): void {
@@ -840,4 +1067,37 @@ function noteOriginFromUrl(origins: Set<string>, input: string): void {
   } catch {
     // Ignore malformed URLs.
   }
+}
+
+function calculateOverlapRatio(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+): number {
+  const left = Math.max(a.x, b.x);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const top = Math.max(a.y, b.y);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+
+  const overlapWidth = Math.max(0, right - left);
+  const overlapHeight = Math.max(0, bottom - top);
+  const overlapArea = overlapWidth * overlapHeight;
+
+  const minArea = Math.min(a.width * a.height, b.width * b.height);
+  if (minArea <= 0) {
+    return 0;
+  }
+
+  return overlapArea / minArea;
+}
+
+function extractSelectorInvariant(action: Action): string | undefined {
+  if (action.type === "waitFor" && action.condition.kind === "selector") {
+    return action.condition.selector;
+  }
+
+  if (action.type === "assert" && action.condition.kind === "selector") {
+    return action.condition.selector;
+  }
+
+  return undefined;
 }

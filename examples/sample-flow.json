@@ -47,6 +47,14 @@
       }
     },
     {
+      "type": "assert",
+      "condition": {
+        "kind": "selector",
+        "selector": "#result",
+        "textContains": "Welcome"
+      }
+    },
+    {
       "type": "snapshot"
     }
   ]

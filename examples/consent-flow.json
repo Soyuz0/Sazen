@@ -1,0 +1,32 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "stabilityProfile": "balanced",
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "http://localhost:4173/consent.html",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "handleConsent",
+      "mode": "accept",
+      "requireFound": true
+    },
+    {
+      "type": "assert",
+      "condition": {
+        "kind": "selector",
+        "selector": "#consent-status",
+        "state": "visible",
+        "textContains": "accepted"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

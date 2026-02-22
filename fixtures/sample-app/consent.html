@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Consent Fixture</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f4f6fb;
+      }
+
+      main {
+        width: min(600px, 100%);
+        background: white;
+        border: 1px solid #d9dfef;
+        border-radius: 12px;
+        padding: 24px;
+      }
+
+      .banner {
+        position: fixed;
+        left: 24px;
+        right: 24px;
+        bottom: 20px;
+        background: #16213a;
+        color: white;
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .banner.hidden {
+        display: none;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        height: 34px;
+        padding: 0 12px;
+        font-weight: 700;
+      }
+
+      .accept {
+        background: #4cc9f0;
+      }
+
+      .reject {
+        background: #cad2e7;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Consent Banner Fixture</h1>
+      <p>Use this page to validate consent handlers.</p>
+      <p id="consent-status">pending</p>
+    </main>
+
+    <div id="consent-banner" class="banner" role="dialog" aria-label="Cookie consent">
+      <span>We use cookies to improve your experience.</span>
+      <div class="actions">
+        <button class="reject" type="button">Reject all</button>
+        <button class="accept" type="button">Accept all cookies</button>
+      </div>
+    </div>
+
+    <script>
+      const banner = document.querySelector('#consent-banner');
+      const status = document.querySelector('#consent-status');
+      const [rejectButton, acceptButton] = banner.querySelectorAll('button');
+
+      acceptButton.addEventListener('click', () => {
+        banner.classList.add('hidden');
+        status.textContent = 'accepted';
+        console.log('[fixture] consent accepted');
+      });
+
+      rejectButton.addEventListener('click', () => {
+        banner.classList.add('hidden');
+        status.textContent = 'rejected';
+        console.log('[fixture] consent rejected');
+      });
+    </script>
+  </body>
+</html>

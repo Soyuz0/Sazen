@@ -31,6 +31,9 @@ npm run dev -- describe https://example.com --viewport 1280x720
 # run scripted actions
 npm run dev -- run examples/sample-flow.json --trace traces/sample-trace.json
 
+# run scripted actions headless (recommended for long test loops)
+npm run dev -- run examples/sample-flow.json --headless
+
 # load a previously saved session
 npm run dev -- load my-session
 
@@ -45,6 +48,17 @@ npm run dev -- flake traces/sample-trace.json --runs 5 --mode strict
 
 # inspect stored trace timeline
 npm run dev -- timeline traces/sample-trace.json --limit 20
+
+# create a triage bundle for sharing/debugging
+npm run dev -- bundle traces/sample-trace.json
+
+# save/load named auth profile (manual login flow)
+npm run dev -- profile-save my-admin http://localhost:3000/login
+npm run dev -- profile-load my-admin
+
+# non-interactive profile save/load for CI smoke checks
+npm run dev -- profile-save ci-profile http://localhost:4173 --headless --auto-save-ms 2000
+npm run dev -- profile-load ci-profile --headless --close-after-ms 2000
 
 # run cross-site smoke matrix
 npm run smoke:sites
@@ -74,6 +88,38 @@ npm test
 - Disable selector checks with `--no-selector-invariants`.
 - Replay runs preflight URL reachability checks by default; disable with `--no-preflight`.
 
+## Assertions and consent helpers
+- Action scripts can include assertion steps:
+
+```json
+{ "type": "assert", "condition": { "kind": "selector", "selector": "#status", "textContains": "ready" } }
+```
+
+- Visual/positional assertions are supported too:
+
+```json
+{ "type": "assert", "condition": { "kind": "selector_bbox_min", "selector": "button", "minWidth": 44, "minHeight": 24 } }
+```
+
+```json
+{ "type": "assert", "condition": { "kind": "selector_overlap_max", "selectorA": "#cta", "selectorB": "#modal", "maxOverlapRatio": 0.0 } }
+```
+
+- Built-in consent helper for cookie walls:
+
+```json
+{ "type": "handleConsent", "mode": "accept", "requireFound": true }
+```
+
+## Stability profiles
+- `--stability-profile fast|balanced|chatty` tunes quiet-window and network-idle budgets.
+- Use `chatty` for heavily streaming pages; use `fast` for speed-focused deterministic checks.
+
+## Timeline and bundles
+- `timeline` supports `--status`, `--action`, `--artifacts`, and `--json` output modes.
+- `bundle` creates a triage package in `reports/triage-bundles/` with trace + timeline manifest + screenshot references.
+- Add `--copy-artifacts` to copy screenshot files into the bundle directory.
+
 ## Resolution / viewport
 - Set viewport for any CLI run with `--viewport WIDTHxHEIGHT` (example: `--viewport 1920x1080`).
 - You can also set viewport inside action scripts via:
@@ -82,9 +128,18 @@ npm test
 { "type": "setViewport", "width": 1366, "height": 768 }
 ```
 
+## Screenshot capture mode
+- `--screenshot-mode viewport` (default): captures only visible viewport, reduces visual flashing.
+- `--screenshot-mode fullpage`: captures full page (can trigger additional rendering/scroll work).
+
 ## Log noise filtering
 - Noise filtering is enabled by default (suppresses common low-signal noise like favicon 404s).
 - Use `--raw-logs` on commands to see the full unfiltered event stream.
+
+## Redaction packs
+- `--redaction-pack default`: baseline secret masking (tokens/passwords/auth headers).
+- `--redaction-pack strict`: stronger masking (adds cookies/API keys/emails).
+- `--redaction-pack off`: disable built-in masking (use carefully).
 
 ## Script format
 See `examples/sample-flow.json`.

@@ -7,6 +7,7 @@ describe("contracts", () => {
       settings: {
         headed: false,
         deterministic: true,
+        stabilityProfile: "chatty",
         viewportWidth: 1280,
         viewportHeight: 800
       },
@@ -27,6 +28,7 @@ describe("contracts", () => {
     expect(parsed.actions).toHaveLength(2);
     expect(parsed.actions[0].type).toBe("navigate");
     expect(parsed.settings?.viewportWidth).toBe(1280);
+    expect(parsed.settings?.stabilityProfile).toBe("chatty");
   });
 
   it("rejects invalid click action with no target", () => {
@@ -61,5 +63,46 @@ describe("contracts", () => {
       expect(parsed.width).toBe(1024);
       expect(parsed.height).toBe(768);
     }
+  });
+
+  it("parses assert and consent actions", () => {
+    const assertAction = parseAction({
+      type: "assert",
+      condition: {
+        kind: "selector",
+        selector: "#status",
+        textContains: "ready"
+      }
+    });
+    expect(assertAction.type).toBe("assert");
+
+    const consentAction = parseAction({
+      type: "handleConsent",
+      mode: "accept",
+      requireFound: true
+    });
+    expect(consentAction.type).toBe("handleConsent");
+
+    const bboxAssert = parseAction({
+      type: "assert",
+      condition: {
+        kind: "selector_bbox_min",
+        selector: "button",
+        minWidth: 44,
+        minHeight: 24
+      }
+    });
+    expect(bboxAssert.type).toBe("assert");
+
+    const overlapAssert = parseAction({
+      type: "assert",
+      condition: {
+        kind: "selector_overlap_max",
+        selectorA: "#left",
+        selectorB: "#right",
+        maxOverlapRatio: 0.1
+      }
+    });
+    expect(overlapAssert.type).toBe("assert");
   });
 });

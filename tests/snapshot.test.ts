@@ -112,6 +112,8 @@ describe("snapshot diff", () => {
     const description = createAgentPageDescription(snapshot, { maxElements: 10 });
     expect(description.interactiveElements).toHaveLength(3);
     expect(description.interactiveElements[0].suggestedActions).toContain("click");
+    expect(description.interactiveElements[0].confidenceScore).toBeGreaterThan(0);
+    expect(description.interactiveElements[0].confidenceReasons.length).toBeGreaterThan(0);
     expect(description.potentialIssues.join(" ")).toMatch(/disabled|duplicate|small hit areas/i);
   });
 });

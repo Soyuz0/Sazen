@@ -1,16 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { computeNetworkIdleBudgetMs } from "../src/session.js";
+import { computeNetworkIdleBudgetMs, computeQuietWindowMs } from "../src/session.js";
 
 describe("session timing helpers", () => {
-  it("caps network idle budget at 2s", () => {
-    expect(computeNetworkIdleBudgetMs(20_000, 120)).toBe(2_000);
+  it("uses smaller budgets in fast profile", () => {
+    expect(computeNetworkIdleBudgetMs("fast", 20_000, 120, "click")).toBeLessThan(
+      computeNetworkIdleBudgetMs("balanced", 20_000, 120, "click")
+    );
   });
 
-  it("respects quiet window minimum", () => {
-    expect(computeNetworkIdleBudgetMs(2_000, 900)).toBe(900);
+  it("uses larger budgets in chatty profile", () => {
+    expect(computeNetworkIdleBudgetMs("chatty", 10_000, 220, "navigate")).toBeGreaterThan(
+      computeNetworkIdleBudgetMs("balanced", 10_000, 220, "navigate")
+    );
   });
 
-  it("never goes below 400ms floor", () => {
-    expect(computeNetworkIdleBudgetMs(300, 10)).toBe(400);
+  it("respects quiet window floor", () => {
+    expect(computeNetworkIdleBudgetMs("balanced", 2_000, 900, "click")).toBeGreaterThanOrEqual(900);
+  });
+
+  it("computes profile-specific quiet windows", () => {
+    expect(computeQuietWindowMs("fast", 120)).toBeLessThan(120);
+    expect(computeQuietWindowMs("chatty", 120)).toBeGreaterThan(120);
   });
 });

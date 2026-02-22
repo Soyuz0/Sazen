@@ -166,6 +166,48 @@ export interface PressAction {
   timeoutMs?: number;
 }
 
+export type AssertCondition =
+  | {
+      kind: "selector";
+      selector: string;
+      state?: "attached" | "detached" | "visible" | "hidden";
+      textContains?: string;
+    }
+  | {
+      kind: "selector_bbox_min";
+      selector: string;
+      minWidth: number;
+      minHeight: number;
+      requireCount?: number;
+    }
+  | {
+      kind: "selector_overlap_max";
+      selectorA: string;
+      selectorB: string;
+      maxOverlapRatio: number;
+    }
+  | {
+      kind: "url_contains";
+      value: string;
+    }
+  | {
+      kind: "title_contains";
+      value: string;
+    };
+
+export interface AssertAction {
+  type: "assert";
+  condition: AssertCondition;
+  timeoutMs?: number;
+}
+
+export interface HandleConsentAction {
+  type: "handleConsent";
+  mode?: "accept" | "reject";
+  requireFound?: boolean;
+  timeoutMs?: number;
+}
+
 export type WaitCondition =
   | {
       kind: "timeout";
@@ -215,6 +257,8 @@ export type Action =
   | FillAction
   | SelectAction
   | PressAction
+  | AssertAction
+  | HandleConsentAction
   | WaitForAction
   | SnapshotAction
   | SetViewportAction
@@ -296,6 +340,9 @@ export interface AgentSessionOptions {
   headed?: boolean;
   deterministic?: boolean;
   slowMoMs?: number;
+  stabilityProfile?: "fast" | "balanced" | "chatty";
+  screenshotMode?: "viewport" | "fullpage";
+  redactionPack?: "default" | "strict" | "off";
   viewportWidth?: number;
   viewportHeight?: number;
   actionTimeoutMs?: number;
@@ -322,6 +369,8 @@ export interface AgentElementDescription {
   interactive: boolean;
   location: string;
   suggestedActions: SuggestedAction[];
+  confidenceScore: number;
+  confidenceReasons: string[];
 }
 
 export interface AgentPageDescription {

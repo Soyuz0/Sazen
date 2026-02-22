@@ -48,6 +48,17 @@ describe("agent session integration", () => {
         });
         expect(fillEmail.status).toBe("ok");
 
+        const assertButtonSize = await session.perform({
+          type: "assert",
+          condition: {
+            kind: "selector_bbox_min",
+            selector: "[data-testid='submit-button']",
+            minWidth: 40,
+            minHeight: 24
+          }
+        });
+        expect(assertButtonSize.status).toBe("ok");
+
         const fillPassword = await session.perform({
           type: "fill",
           target: { kind: "css", selector: "[data-testid='password-input']" },
@@ -74,11 +85,31 @@ describe("agent session integration", () => {
         expect(waitForResult.status).toBe("ok");
         expect(snapshot.status).toBe("ok");
 
+        const assertNoOverlap = await session.perform({
+          type: "assert",
+          condition: {
+            kind: "selector_overlap_max",
+            selectorA: "[data-testid='submit-button']",
+            selectorB: "#result",
+            maxOverlapRatio: 0
+          }
+        });
+        expect(assertNoOverlap.status).toBe("ok");
+
         const resultNode = snapshot.postSnapshot.nodes.find((node) => node.attributes.id === "result");
         expect(resultNode?.text).toContain("Welcome agent@example.com");
 
         actionResults.push(
-          ...[navigate, fillEmail, fillPassword, clickSubmit, waitForResult, snapshot].map((result) => ({
+          ...[
+            navigate,
+            fillEmail,
+            assertButtonSize,
+            fillPassword,
+            clickSubmit,
+            waitForResult,
+            snapshot,
+            assertNoOverlap
+          ].map((result) => ({
             status: result.status,
             events: result.events.map((event) =>
               event.kind === "console" ? event.text : event.kind === "network" ? event.url : event.message
@@ -103,7 +134,7 @@ describe("agent session integration", () => {
         artifactsDir: tempDir
       });
 
-      expect(replay.totalActions).toBe(6);
+      expect(replay.totalActions).toBe(8);
       expect(replay.mismatched).toBe(0);
 
       await rm(tempDir, { recursive: true, force: true });
@@ -226,6 +257,54 @@ describe("agent session integration", () => {
       expect(resized.status).toBe("ok");
       expect(resized.postSnapshot.viewport.width).toBe(1024);
       expect(resized.postSnapshot.viewport.height).toBe(600);
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("handles consent banners and supports assert actions", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-consent-"));
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      const nav = await session.perform({ type: "navigate", url: `${fixture.baseUrl}/consent.html` });
+      expect(nav.status).toBe("ok");
+
+      const consent = await session.perform({
+        type: "handleConsent",
+        mode: "accept",
+        requireFound: true
+      });
+      expect(consent.status).toBe("ok");
+
+      const assertStatus = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "selector",
+          selector: "#consent-status",
+          state: "visible",
+          textContains: "accepted"
+        }
+      });
+
+      expect(assertStatus.status).toBe("ok");
+
+      const assertUrl = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "url_contains",
+          value: "/consent.html"
+        }
+      });
+      expect(assertUrl.status).toBe("ok");
     } finally {
       await session.close();
       await rm(tempDir, { recursive: true, force: true });

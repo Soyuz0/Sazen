@@ -35,6 +35,36 @@ const waitConditionSchema = z.discriminatedUnion("kind", [
   })
 ]);
 
+const assertConditionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("selector"),
+    selector: z.string().min(1),
+    state: z.enum(["attached", "detached", "visible", "hidden"]).optional(),
+    textContains: z.string().optional()
+  }),
+  z.object({
+    kind: z.literal("selector_bbox_min"),
+    selector: z.string().min(1),
+    minWidth: z.number().positive(),
+    minHeight: z.number().positive(),
+    requireCount: z.number().int().positive().optional()
+  }),
+  z.object({
+    kind: z.literal("selector_overlap_max"),
+    selectorA: z.string().min(1),
+    selectorB: z.string().min(1),
+    maxOverlapRatio: z.number().min(0).max(1)
+  }),
+  z.object({
+    kind: z.literal("url_contains"),
+    value: z.string().min(1)
+  }),
+  z.object({
+    kind: z.literal("title_contains"),
+    value: z.string().min(1)
+  })
+]);
+
 const actionBaseSchema = z.object({
   timeoutMs: z.number().int().positive().optional()
 });
@@ -65,6 +95,15 @@ const actionSchemaCore = z.discriminatedUnion("type", [
   actionBaseSchema.extend({
     type: z.literal("press"),
     key: z.string().min(1)
+  }),
+  actionBaseSchema.extend({
+    type: z.literal("assert"),
+    condition: assertConditionSchema
+  }),
+  actionBaseSchema.extend({
+    type: z.literal("handleConsent"),
+    mode: z.enum(["accept", "reject"]).optional(),
+    requireFound: z.boolean().optional()
   }),
   actionBaseSchema.extend({
     type: z.literal("waitFor"),
@@ -110,6 +149,9 @@ export const scriptSchema = z.object({
       headed: z.boolean().optional(),
       deterministic: z.boolean().optional(),
       slowMoMs: z.number().int().nonnegative().optional(),
+      stabilityProfile: z.enum(["fast", "balanced", "chatty"]).optional(),
+      screenshotMode: z.enum(["viewport", "fullpage"]).optional(),
+      redactionPack: z.enum(["default", "strict", "off"]).optional(),
       viewportWidth: z.number().int().positive().optional(),
       viewportHeight: z.number().int().positive().optional(),
       actionTimeoutMs: z.number().int().positive().optional(),

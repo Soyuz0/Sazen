@@ -23,6 +23,7 @@ interface MatrixSummary {
   options: {
     headed: boolean;
     deterministic: boolean;
+    stabilityProfile: "fast" | "balanced" | "chatty";
     operationTimeoutMs: number;
     actionTimeoutMs: number;
   };
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
   const argSet = new Set(args);
   const headed = argSet.has("--headed");
   const deterministic = !argSet.has("--no-deterministic");
+  const stabilityProfile = parseStabilityProfileArg(args, "--stability-profile", "balanced");
   const operationTimeoutMs = parsePositiveIntArg(args, "--operation-timeout-ms", 60_000);
   const actionTimeoutMs = parsePositiveIntArg(args, "--action-timeout-ms", 30_000);
 
@@ -65,11 +67,12 @@ async function main(): Promise<void> {
     const script = parseScript(JSON.parse(raw));
 
     const sessionOptions: AgentSessionOptions = {
+      ...script.settings,
       headed,
       deterministic,
+      stabilityProfile,
       actionTimeoutMs,
-      captureScreenshots: true,
-      ...script.settings
+      captureScreenshots: true
     };
 
     const session = new AgentSession(sessionOptions);
@@ -157,6 +160,7 @@ async function main(): Promise<void> {
     options: {
       headed,
       deterministic,
+      stabilityProfile,
       operationTimeoutMs,
       actionTimeoutMs
     },
@@ -193,6 +197,28 @@ function parsePositiveIntArg(args: string[], flag: string, fallback: number): nu
   }
 
   return parsed;
+}
+
+function parseStabilityProfileArg(
+  args: string[],
+  flag: string,
+  fallback: "fast" | "balanced" | "chatty"
+): "fast" | "balanced" | "chatty" {
+  const index = args.indexOf(flag);
+  if (index === -1) {
+    return fallback;
+  }
+
+  const raw = args[index + 1];
+  if (!raw) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+
+  if (raw === "fast" || raw === "balanced" || raw === "chatty") {
+    return raw;
+  }
+
+  throw new Error(`Invalid value for ${flag}: ${raw}`);
 }
 
 function resolveActionTimeoutMs(action: Action, fallback: number): number {

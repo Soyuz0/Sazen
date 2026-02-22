@@ -59,7 +59,6 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented deterministic defaults: reduced motion, random/time shims, layout-shift capture.
 - Implemented tests: contract + snapshot unit tests, integration tests for real app flow + replay + session load + ambiguous role disambiguation.
 - Implemented batch validation runner: `npm run smoke:sites` for sequential multi-site coverage with JSON summary output.
-- Implemented replay upgrades: preflight origin checks, strict/relaxed replay modes, and repeated-run flake detection.
 - Implemented replay upgrades: preflight origin checks, strict/relaxed replay modes, selector-level invariants, and repeated-run flake detection.
 - Implemented trace metadata upgrades: environment contract (`requiredOrigins`) and action timeline summaries.
 - Implemented log noise controls with default filtering and `--raw-logs` override.
@@ -67,6 +66,16 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented agent-first page modality output (`describe`) with positional metadata and issue hints.
 - Implemented timeout-guarded site matrix execution (per-operation and per-action timeouts) to prevent hangs.
 - Implemented trace timeline inspection command (`timeline`) with tabular and JSON output.
+- Implemented assertion DSL (`assert`) with selector/url/title checks.
+- Implemented consent helper action (`handleConsent`) for common cookie/consent banners.
+- Implemented adaptive stability profiles (`fast`, `balanced`, `chatty`) for wait tuning.
+- Implemented triage bundle generation (`bundle`) for trace+timeline+artifact packaging.
+- Implemented interactive confidence scoring in agent page descriptions.
+- Implemented screenshot modes (`viewport` default, optional `fullpage`) to reduce visual flashing during runs.
+- Implemented bundle artifact copy mode (`bundle --copy-artifacts`) for portable triage packages.
+- Implemented configurable redaction policy packs (`default`, `strict`, `off`).
+- Implemented named profile aliases (`profile-save`, `profile-load`) for reusable authenticated sessions.
+- Implemented visual assertion primitives (`selector_bbox_min`, `selector_overlap_max`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -75,7 +84,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Run replay and validate expected vs actual DOM hashes.
 
 ## Cross-Site Validation Coverage
-- Added multi-site scripted flows in `examples/site-flows` for: example, wikipedia, mdn, npm, github, python, vite, hn, rust, bbc, react, ebay.
+- Added multi-site scripted flows in `examples/site-flows` for: example, wikipedia, mdn, nodejs, github, python, vite, hn, rust, bbc, react, books.
 - Each flow performs navigation + at least one interaction step (click/fill/search).
 - Ran matrix repeatedly; latest full pass: 12/12 successful flows with no new blocking bugs.
 - Verified replay behavior on dynamic/public traces: strict mode surfaces real DOM drift, relaxed mode validates stable invariants.
@@ -97,6 +106,13 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added offscreen-aware element ranking and visual issue detection in agent page descriptions.
 - Added smoke runner timeout flags (`--operation-timeout-ms`, `--action-timeout-ms`) for safer unattended runs.
 - Standardized manual run logs under `reports/runtime-logs/` for reproducible audit trails.
+- Added timeline filters/artifact visibility for quicker failure triage.
+- Added consent and assert integration coverage in fixture tests.
+- Enforced headless-by-default behavior in site matrix runs unless explicitly requested (`--headed`).
+- Added optional screenshot copying into bundles for offline handoff.
+- Replaced unstable npmjs smoke flow (Cloudflare challenge) with nodejs.org flow for deterministic matrix reliability.
+- Replaced unstable ebay smoke flow with books.toscrape flow for deterministic e-commerce-style coverage.
+- Added profile command wrappers to simplify session save/load workflows for role-based testing.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -109,10 +125,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 
 ### Near-Term (v0.x)
 - **Resilient selector healing:** rank fallback locators so small DOM changes do not break actions.
-- **Assertion DSL with auto-wait:** add `expect` primitives for state verification without custom scripts.
-- **Failure triage bundles:** export one artifact pack with trace, screenshots, and event timeline.
-- **Named auth profiles:** switch user roles quickly with isolated saved storage contexts.
-- **Redaction policy packs:** configurable redaction presets for safe trace sharing.
+- **Trace-scoped role switching:** profile selection directly inside action scripts and replay sessions.
+- **Visual diff assertions:** compare screenshots against stored baselines within assert actions.
 
 ### Medium-Term (v1)
 - **Parallel session scheduler:** run multiple isolated agent sessions concurrently with stable resource control.
@@ -130,9 +144,6 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 
 ## Feature Gaps Found During Dogfooding
 - **Action timeline UI:** add a live timeline view linking each action to screenshot + diff + top events.
-- **Interactive confidence scoring:** rank truly actionable targets higher and down-rank structural labels to reduce misclick risk.
-- **Consent/cookie strategy hooks:** configurable handlers for common consent walls that block navigation on media/e-commerce sites.
-- **Adaptive stability profiles:** tune quiet-window and network-idle budgets per site type to reduce long tail action latency.
-- **Selector-level replay invariants:** add optional per-action invariants (selector exists/text contains) for stronger relaxed-mode guarantees.
+- **Consent/cookie strategy hooks:** extend generic accept/reject logic with site-specific adapters and region-aware variants.
 - **Timeline inspector UI:** richer interactive viewer (filters/grouping/artifact previews) beyond current table/JSON output.
 - **Visual regression overlays:** annotate screenshots with failing/targeted elements and compare against baseline captures.

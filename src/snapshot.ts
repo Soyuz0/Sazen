@@ -521,34 +521,42 @@ export function createAgentPageDescription(
   const interactiveElements = snapshot.nodes
     .filter((node) => node.interactive)
     .sort((left, right) => {
-      const leftInViewport = isBoxInViewport(left.boundingBox, snapshot.viewport.width, snapshot.viewport.height);
-      const rightInViewport = isBoxInViewport(right.boundingBox, snapshot.viewport.width, snapshot.viewport.height);
-      if (leftInViewport !== rightInViewport) {
-        return leftInViewport ? -1 : 1;
-      }
-      if (left.visible !== right.visible) {
-        return left.visible ? -1 : 1;
-      }
-      if (left.enabled !== right.enabled) {
-        return left.enabled ? -1 : 1;
-      }
-      return left.id.localeCompare(right.id);
+      const leftConfidence = scoreInteractionConfidence(
+        left,
+        snapshot.viewport.width,
+        snapshot.viewport.height
+      ).score;
+      const rightConfidence = scoreInteractionConfidence(
+        right,
+        snapshot.viewport.width,
+        snapshot.viewport.height
+      ).score;
+      return rightConfidence - leftConfidence || left.id.localeCompare(right.id);
     })
     .slice(0, maxElements)
-    .map((node): AgentElementDescription => ({
-      inViewport: isBoxInViewport(node.boundingBox, snapshot.viewport.width, snapshot.viewport.height),
-      id: node.id,
-      stableRef: node.stableRef,
-      role: node.role,
-      name: node.name,
-      text: node.text,
-      bbox: node.boundingBox,
-      visible: node.visible,
-      enabled: node.enabled,
-      interactive: node.interactive,
-      location: describeLocation(node.boundingBox, snapshot.viewport.width, snapshot.viewport.height),
-      suggestedActions: suggestedActionsForNode(node)
-    }));
+    .map((node): AgentElementDescription => {
+      const confidence = scoreInteractionConfidence(
+        node,
+        snapshot.viewport.width,
+        snapshot.viewport.height
+      );
+      return {
+        inViewport: isBoxInViewport(node.boundingBox, snapshot.viewport.width, snapshot.viewport.height),
+        id: node.id,
+        stableRef: node.stableRef,
+        role: node.role,
+        name: node.name,
+        text: node.text,
+        bbox: node.boundingBox,
+        visible: node.visible,
+        enabled: node.enabled,
+        interactive: node.interactive,
+        location: describeLocation(node.boundingBox, snapshot.viewport.width, snapshot.viewport.height),
+        suggestedActions: suggestedActionsForNode(node),
+        confidenceScore: confidence.score,
+        confidenceReasons: confidence.reasons
+      };
+    });
 
   const potentialIssues = detectPotentialIssues(snapshot);
 
@@ -699,4 +707,49 @@ function isBoxInViewport(
   const right = box.x + box.width;
   const bottom = box.y + box.height;
   return right > 0 && bottom > 0 && box.x < viewportWidth && box.y < viewportHeight;
+}
+
+function scoreInteractionConfidence(
+  node: AgentNode,
+  viewportWidth: number,
+  viewportHeight: number
+): { score: number; reasons: string[] } {
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (node.visible) {
+    score += 35;
+    reasons.push("visible");
+  }
+
+  if (node.enabled) {
+    score += 20;
+    reasons.push("enabled");
+  }
+
+  if (isBoxInViewport(node.boundingBox, viewportWidth, viewportHeight)) {
+    score += 20;
+    reasons.push("in-viewport");
+  }
+
+  if (node.role !== "generic") {
+    score += 10;
+    reasons.push("semantic-role");
+  }
+
+  if ((node.name || node.text).trim().length > 0) {
+    score += 10;
+    reasons.push("named-or-textual");
+  }
+
+  const hitArea = node.boundingBox.width * node.boundingBox.height;
+  if (hitArea >= 44 * 44) {
+    score += 5;
+    reasons.push("adequate-hit-area");
+  }
+
+  return {
+    score,
+    reasons
+  };
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import process from "node:process";
 import { Command } from "commander";
 import { cliActionSchema, parseScript } from "./contracts.js";
@@ -24,10 +24,13 @@ configureRunCommand(program);
 configureActionCommand(program);
 configureSnapshotCommand(program);
 configureDescribeCommand(program);
+configureProfileSaveCommand(program);
+configureProfileLoadCommand(program);
 configureLoadCommand(program);
 configureReplayCommand(program);
 configureFlakeCommand(program);
 configureTimelineCommand(program);
+configureBundleCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
@@ -42,8 +45,11 @@ function configureOpenCommand(root: Command): void {
     .argument("<url>", "URL to navigate to")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--save <name>", "Save session on exit")
     .action(async (url: string, options: Record<string, string | boolean>) => {
@@ -77,8 +83,11 @@ function configureInspectCommand(root: Command): void {
     .argument("<url>", "URL to inspect")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--limit <n>", "Max rows to print", "40")
     .action(async (url: string, options: Record<string, string | boolean>) => {
@@ -114,8 +123,11 @@ function configureRunCommand(root: Command): void {
     .argument("<scriptPath>", "Path to action script JSON")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--trace <path>", "Write trace JSON to this path")
     .option("--save <name>", "Save session on completion")
@@ -126,8 +138,8 @@ function configureRunCommand(root: Command): void {
       const script = parseScript(JSON.parse(raw));
 
       const session = new AgentSession({
-        ...toSessionOptions(options),
-        ...script.settings
+        ...script.settings,
+        ...toSessionOptions(options)
       });
 
       await session.start();
@@ -170,8 +182,11 @@ function configureActionCommand(root: Command): void {
     .option("--url <url>", "Navigate before action")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--logs", "Print captured events", true)
     .action(async (actionRaw: string, options: Record<string, string | boolean>) => {
@@ -204,8 +219,11 @@ function configureSnapshotCommand(root: Command): void {
     .argument("<url>", "URL to snapshot")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (url: string, options: Record<string, string | boolean>) => {
       const session = new AgentSession(toSessionOptions(options));
@@ -228,8 +246,11 @@ function configureDescribeCommand(root: Command): void {
     .argument("<url>", "URL to describe")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--max-elements <n>", "Max interactive elements in output", "80")
     .action(async (url: string, options: Record<string, string | boolean>) => {
@@ -259,8 +280,11 @@ function configureReplayCommand(root: Command): void {
     .option("--mode <mode>", "Replay mode: strict|relaxed", "strict")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--preflight-timeout <ms>", "Preflight timeout per origin in ms", "4000")
     .option("--no-preflight", "Skip replay preflight checks")
@@ -299,16 +323,119 @@ function configureReplayCommand(root: Command): void {
     });
 }
 
+function configureProfileSaveCommand(root: Command): void {
+  root
+    .command("profile-save")
+    .description("Open a URL, allow manual login, then save a named profile")
+    .argument("<name>", "Profile name")
+    .argument("<url>", "Starting URL")
+    .option("--profiles-root <path>", "Profiles root directory", ".agent-browser/profiles")
+    .option("--auto-save-ms <ms>", "Auto-save profile after this many ms")
+    .option("--headless", "Run Chromium headless", false)
+    .option("--no-deterministic", "Disable deterministic mode")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
+    .option("--raw-logs", "Disable log noise filtering", false)
+    .action(async (name: string, url: string, options: Record<string, string | boolean>) => {
+      const profilesRoot =
+        typeof options.profilesRoot === "string" ? options.profilesRoot : ".agent-browser/profiles";
+      const session = new AgentSession(toSessionOptions(options));
+      await session.start();
+
+      const unsubscribe = session.subscribe((event) => {
+        console.log(formatEvent(event));
+      });
+
+      try {
+        const nav = await session.perform({ type: "navigate", url });
+        printActionResult(nav, false);
+        const autoSaveMs = toOptionalNumber(options.autoSaveMs);
+        if (typeof autoSaveMs === "number" && autoSaveMs > 0) {
+          console.log(`Auto-saving profile '${name}' in ${autoSaveMs}ms.`);
+        } else {
+          console.log(`Complete login/manual setup for profile '${name}', then press Ctrl+C to save.`);
+        }
+
+        await waitForInterruptOrTimeout(autoSaveMs);
+        const manifestPath = await session.saveSession(name, profilesRoot);
+        console.log(`Saved profile -> ${manifestPath}`);
+      } finally {
+        unsubscribe();
+        await safeCloseSession(session);
+      }
+    });
+}
+
+function configureProfileLoadCommand(root: Command): void {
+  root
+    .command("profile-load")
+    .description("Load a named profile and keep browser open")
+    .argument("<name>", "Profile name")
+    .option("--profiles-root <path>", "Profiles root directory", ".agent-browser/profiles")
+    .option("--close-after-ms <ms>", "Automatically close profile after this many ms")
+    .option("--headless", "Run Chromium headless", false)
+    .option("--no-deterministic", "Disable deterministic mode")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
+    .option("--raw-logs", "Disable log noise filtering", false)
+    .action(async (name: string, options: Record<string, string | boolean>) => {
+      const profilesRoot =
+        typeof options.profilesRoot === "string" ? options.profilesRoot : ".agent-browser/profiles";
+      const session = await AgentSession.loadSavedSession(name, toSessionOptions(options), profilesRoot);
+
+      const unsubscribe = session.subscribe((event) => {
+        console.log(formatEvent(event));
+      });
+
+      try {
+        const snapshot = await session.snapshot();
+        console.log(`Loaded profile '${name}' at ${snapshot.url}`);
+        const closeAfterMs = toOptionalNumber(options.closeAfterMs);
+        if (typeof closeAfterMs === "number" && closeAfterMs > 0) {
+          console.log(`Auto-closing in ${closeAfterMs}ms.`);
+        } else {
+          console.log("Browser is open. Press Ctrl+C to close.");
+        }
+
+        await waitForInterruptOrTimeout(closeAfterMs);
+      } finally {
+        unsubscribe();
+        await safeCloseSession(session);
+      }
+    });
+}
+
 function configureTimelineCommand(root: Command): void {
   root
     .command("timeline")
     .description("Show trace timeline with action-level details")
     .argument("<tracePath>", "Path to trace JSON")
     .option("--limit <n>", "Max timeline rows", "200")
+    .option("--status <status>", "Filter by action status")
+    .option("--action <type>", "Filter by action type")
+    .option("--artifacts", "Show screenshot path per row", false)
     .option("--json", "Print timeline as JSON", false)
     .action(async (tracePath: string, options: Record<string, string | boolean>) => {
       const { absolutePath, trace } = await loadSavedTrace(tracePath);
-      const timeline = getTraceTimeline(trace);
+      const timeline = getTraceTimeline(trace).filter((entry) => {
+        if (typeof options.status === "string" && options.status.length > 0) {
+          if (entry.status !== options.status) {
+            return false;
+          }
+        }
+        if (typeof options.action === "string" && options.action.length > 0) {
+          if (entry.actionType !== options.action) {
+            return false;
+          }
+        }
+        return true;
+      });
       const limit = Math.max(1, toNumber(options.limit, 200));
       const slice = timeline.slice(0, limit);
 
@@ -345,6 +472,71 @@ function configureTimelineCommand(root: Command): void {
             truncate(entry.postUrl || "(unknown)", 70)
           ].join(" | ")
         );
+
+        if (Boolean(options.artifacts) && entry.screenshotPath) {
+          console.log(`    screenshot: ${entry.screenshotPath}`);
+        }
+      }
+    });
+}
+
+function configureBundleCommand(root: Command): void {
+  root
+    .command("bundle")
+    .description("Create a triage bundle from a trace")
+    .argument("<tracePath>", "Path to trace JSON")
+    .option("--out <dir>", "Output directory", "reports/triage-bundles")
+    .option("--copy-artifacts", "Copy screenshot artifacts into the bundle", false)
+    .action(async (tracePath: string, options: Record<string, string | boolean>) => {
+      const { absolutePath, trace } = await loadSavedTrace(tracePath);
+      const timeline = getTraceTimeline(trace);
+      const bundleRoot = typeof options.out === "string" ? options.out : "reports/triage-bundles";
+      const bundleDir = resolve(bundleRoot, `${Date.now()}-${basename(absolutePath, ".json")}`);
+
+      await mkdir(bundleDir, { recursive: true });
+
+      const traceCopyPath = join(bundleDir, basename(absolutePath));
+      await copyFile(absolutePath, traceCopyPath);
+
+      const screenshots = timeline
+        .map((entry) => entry.screenshotPath)
+        .filter((path): path is string => typeof path === "string");
+
+      const copiedScreenshots: string[] = [];
+      if (Boolean(options.copyArtifacts) && screenshots.length > 0) {
+        const screenshotsDir = join(bundleDir, "screenshots");
+        await mkdir(screenshotsDir, { recursive: true });
+        for (const screenshotPath of screenshots) {
+          const targetPath = join(screenshotsDir, basename(screenshotPath));
+          try {
+            await copyFile(screenshotPath, targetPath);
+            copiedScreenshots.push(targetPath);
+          } catch {
+            // Skip missing/unreadable screenshot paths.
+          }
+        }
+      }
+
+      const manifest = {
+        createdAt: new Date().toISOString(),
+        sourceTracePath: absolutePath,
+        copiedTracePath: traceCopyPath,
+        totalActions: timeline.length,
+        failedActions: timeline.filter((entry) => entry.status !== "ok").length,
+        screenshots,
+        copiedScreenshots,
+        timeline
+      };
+
+      const manifestPath = join(bundleDir, "bundle.json");
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+
+      console.log(`Bundle created: ${bundleDir}`);
+      console.log(`- Trace: ${traceCopyPath}`);
+      console.log(`- Manifest: ${manifestPath}`);
+      console.log(`- Screenshot refs: ${screenshots.length}`);
+      if (Boolean(options.copyArtifacts)) {
+        console.log(`- Screenshots copied: ${copiedScreenshots.length}`);
       }
     });
 }
@@ -358,8 +550,11 @@ function configureFlakeCommand(root: Command): void {
     .option("--mode <mode>", "Replay mode: strict|relaxed", "strict")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--preflight-timeout <ms>", "Preflight timeout per origin in ms", "4000")
     .option("--no-preflight", "Skip replay preflight checks")
@@ -400,8 +595,10 @@ function configureLoadCommand(root: Command): void {
     .option("--sessions-root <path>", "Session root directory", ".agent-browser/sessions")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
-    .option("--slowmo <ms>", "Playwright slow motion delay in ms", "0")
-    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT", "1440x920")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (name: string, options: Record<string, string | boolean>) => {
       const rootDir =
@@ -425,15 +622,33 @@ function configureLoadCommand(root: Command): void {
 
 function toSessionOptions(options: Record<string, string | boolean>): AgentSessionOptions {
   const viewport = parseViewportSize(options.viewport);
+  const slowMo = toOptionalNumber(options.slowmo);
+  const stabilityProfile = parseStabilityProfile(options.stabilityProfile);
+  const screenshotMode = parseScreenshotMode(options.screenshotMode);
+  const redactionPack = parseRedactionPack(options.redactionPack);
 
-  return {
-    headed: !Boolean(options.headless),
-    deterministic: Boolean(options.deterministic),
-    slowMoMs: toNumber(options.slowmo, 0),
+  const result: AgentSessionOptions = {
     viewportWidth: viewport?.width,
     viewportHeight: viewport?.height,
-    logNoiseFiltering: !Boolean(options.rawLogs)
+    slowMoMs: slowMo,
+    stabilityProfile,
+    screenshotMode,
+    redactionPack
   };
+
+  if (options.headless === true) {
+    result.headed = false;
+  }
+
+  if (options.deterministic === false) {
+    result.deterministic = false;
+  }
+
+  if (options.rawLogs === true) {
+    result.logNoiseFiltering = false;
+  }
+
+  return result;
 }
 
 function parseReplayMode(raw: string | boolean | undefined): ReplayMode {
@@ -468,6 +683,48 @@ function parseViewportSize(
   }
 
   return { width, height };
+}
+
+function parseStabilityProfile(
+  raw: string | boolean | undefined
+): AgentSessionOptions["stabilityProfile"] {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  if (raw === "fast" || raw === "balanced" || raw === "chatty") {
+    return raw;
+  }
+
+  throw new Error(`Invalid stability profile '${raw}'. Use fast, balanced, or chatty.`);
+}
+
+function parseScreenshotMode(
+  raw: string | boolean | undefined
+): AgentSessionOptions["screenshotMode"] {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  if (raw === "viewport" || raw === "fullpage") {
+    return raw;
+  }
+
+  throw new Error(`Invalid screenshot mode '${raw}'. Use viewport or fullpage.`);
+}
+
+function parseRedactionPack(
+  raw: string | boolean | undefined
+): AgentSessionOptions["redactionPack"] {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  if (raw === "default" || raw === "strict" || raw === "off") {
+    return raw;
+  }
+
+  throw new Error(`Invalid redaction pack '${raw}'. Use default, strict, or off.`);
 }
 
 async function parseActionInput(input: string): Promise<Action | Action[]> {
@@ -505,6 +762,14 @@ function toNumber(raw: string | boolean | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function toOptionalNumber(raw: string | boolean | undefined): number | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function truncate(input: string, max = 60): string {
   if (input.length <= max) {
     return input;
@@ -533,4 +798,30 @@ function waitForInterrupt(): Promise<void> {
     process.once("SIGINT", onSigInt);
     process.once("SIGTERM", onSigTerm);
   });
+}
+
+async function waitForInterruptOrTimeout(timeoutMs: number | undefined): Promise<void> {
+  if (typeof timeoutMs !== "number" || timeoutMs <= 0) {
+    await waitForInterrupt();
+    return;
+  }
+
+  await Promise.race([
+    waitForInterrupt(),
+    new Promise<void>((resolvePromise) => {
+      setTimeout(resolvePromise, timeoutMs);
+    })
+  ]);
+}
+
+async function safeCloseSession(session: AgentSession): Promise<void> {
+  try {
+    await session.close();
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (message.includes("target page") || message.includes("target closed") || message.includes("closed")) {
+      return;
+    }
+    throw error;
+  }
 }

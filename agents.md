@@ -30,6 +30,7 @@ These rules define how autonomous agents should operate when using this browser 
 - Capture console, network, page errors, and request failures.
 - Stream logs in real time for human visibility.
 - Attach screenshot artifacts to action results when enabled.
+- Use viewport screenshot mode for routine runs; only use fullpage screenshots when needed for deep visual audits.
 - Keep event ordering stable with timestamps.
 - Provide agent-first page descriptions (what is present, where it is, and how to interact).
 - Include positional/visual issue hints (offscreen targets, tiny hit areas, overlaps, disabled controls).
@@ -78,6 +79,7 @@ These rules define how autonomous agents should operate when using this browser 
 - Use the agent browser itself to execute and validate actions, not only isolated unit checks.
 - Confirm real-time logs/action output and action-result envelopes during these runs.
 - Validate viewport-dependent behavior by testing multiple resolutions.
+- For unattended/long automation runs, prefer headless mode unless visual validation is the goal.
 
 ## 13) Continuous Feature Planning
 - During implementation, continuously identify high-value browser features and append them to `.plan`.
@@ -98,3 +100,7 @@ These rules define how autonomous agents should operate when using this browser 
 - After each fix, re-run affected sites and then the full multi-site matrix.
 - Add both implemented fixes and deferred items to `.plan`.
 - Keep a final consecutive passing run across the full site matrix before closing work.
+
+## 16) Completion Discipline
+- Continue implementing planned scope iteratively without stopping at intermediate milestones.
+- Only pause for completion reporting after tests pass and no high-priority plan items remain for the current phase.

@@ -7,30 +7,29 @@
   "actions": [
     {
       "type": "navigate",
-      "url": "https://www.npmjs.com",
+      "url": "https://nodejs.org/en",
       "waitUntil": "domcontentloaded"
-    },
-    {
-      "type": "fill",
-      "target": {
-        "kind": "roleName",
-        "role": "combobox",
-        "name": "Search packages"
-      },
-      "value": "playwright"
     },
     {
       "type": "click",
       "target": {
-        "kind": "roleName",
-        "role": "button",
-        "name": "Search"
+        "kind": "stableRef",
+        "value": "href:https://nodejs.org/en/download"
       }
     },
     {
       "type": "waitFor",
       "condition": {
-        "kind": "network_idle"
+        "kind": "selector",
+        "selector": "main",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "assert",
+      "condition": {
+        "kind": "url_contains",
+        "value": "/download"
       }
     },
     {
