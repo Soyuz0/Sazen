@@ -69,6 +69,9 @@ export class AdapterRuntime {
             "pauseSession",
             "resumeSession",
             "getSessionState",
+            "session.pause",
+            "session.resume",
+            "session.state",
             "snapshot",
             "describe",
             "saveTrace",
@@ -91,12 +94,15 @@ export class AdapterRuntime {
         return this.runActions(params);
 
       case "pauseSession":
+      case "session.pause":
         return this.pauseSession(params);
 
       case "resumeSession":
+      case "session.resume":
         return this.resumeSession(params);
 
       case "getSessionState":
+      case "session.state":
         return this.getSessionState(params);
 
       case "snapshot":
@@ -202,7 +208,8 @@ export class AdapterRuntime {
       pausedMs: state.pausedMs,
       sources: state.sources,
       runActive: entry.control.runActive,
-      runId: entry.control.runId
+      runId: entry.control.runId,
+      latestIntervention: entry.session.getLatestIntervention()
     };
   }
 
@@ -215,7 +222,8 @@ export class AdapterRuntime {
       pausedMs: state.pausedMs,
       sources: state.sources,
       runActive: entry.control.runActive,
-      runId: entry.control.runId
+      runId: entry.control.runId,
+      latestIntervention: entry.session.getLatestIntervention()
     };
   }
 
@@ -227,7 +235,8 @@ export class AdapterRuntime {
       runActive: entry.control.runActive,
       runId: entry.control.runId,
       pausedMs: state.pausedMs,
-      sources: state.sources
+      sources: state.sources,
+      latestIntervention: entry.session.getLatestIntervention()
     };
   }
 

@@ -29,6 +29,9 @@ describe("timeline html", () => {
     expect(html).toContain("https://example.com");
     expect(html).toContain("navigate");
     expect(html).toContain("open");
+    expect(html).toContain("Entry Details");
+    expect(html).toContain("Status Groups");
+    expect(html).toContain("Action Groups");
   });
 
   it("escapes html-sensitive content", () => {

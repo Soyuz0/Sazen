@@ -312,6 +312,80 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("applies region-aware consent strategy hooks", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-consent-region-"));
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      const nav = await session.perform({ type: "navigate", url: `${fixture.baseUrl}/consent-region.html` });
+      expect(nav.status).toBe("ok");
+
+      const consent = await session.perform({
+        type: "handleConsent",
+        mode: "reject",
+        strategy: "auto",
+        region: "eu",
+        requireFound: true
+      });
+      expect(consent.status).toBe("ok");
+
+      const assertStatus = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "selector",
+          selector: "#state",
+          state: "visible",
+          textContains: "rejected"
+        }
+      });
+
+      expect(assertStatus.status).toBe("ok");
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("writes context attachment manifest for screenshot-producing actions", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-context-attach-"));
+    const contextDir = join(tempDir, "context");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: true,
+      artifactsDir: tempDir,
+      contextAttachmentsDir: contextDir
+    });
+
+    try {
+      await session.start();
+      const nav = await session.perform({ type: "navigate", url: fixture.baseUrl });
+      expect(nav.status).toBe("ok");
+
+      const manifestRaw = await readFile(join(contextDir, "latest.json"), "utf8");
+      const manifest = JSON.parse(manifestRaw) as {
+        actionType: string;
+        latestPath: string;
+      };
+      expect(manifest.actionType).toBe("navigate");
+      expect(manifest.latestPath.endsWith("latest.png") || manifest.latestPath.endsWith("latest.bin")).toBe(true);
+
+      const streamRaw = await readFile(join(contextDir, "attachments.jsonl"), "utf8");
+      expect(streamRaw.trim().length).toBeGreaterThan(0);
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("supports pause action and captures intervention summary", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-pause-"));
 
@@ -379,6 +453,8 @@ describe("agent session integration", () => {
       const intervention = (trace.interventions ?? [])[0];
       expect(intervention.elapsedMs).toBeGreaterThanOrEqual(80);
       expect(intervention.sources).toContain("test");
+      expect(intervention.storageDelta).toBeDefined();
+      expect(Array.isArray(intervention.reconciliationHints)).toBe(true);
 
       const actions = trace.timeline?.map((entry) => entry.actionType) ?? [];
       expect(actions).toContain("pause_start");

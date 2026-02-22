@@ -108,7 +108,10 @@ const actionSchemaCore = z.discriminatedUnion("type", [
   actionBaseSchema.extend({
     type: z.literal("handleConsent"),
     mode: z.enum(["accept", "reject"]).optional(),
-    requireFound: z.boolean().optional()
+    requireFound: z.boolean().optional(),
+    strategy: z.enum(["auto", "generic", "cmp"]).optional(),
+    siteAdapter: z.string().min(1).optional(),
+    region: z.enum(["auto", "global", "eu", "us", "uk"]).optional()
   }),
   actionBaseSchema.extend({
     type: z.literal("waitFor"),
@@ -165,6 +168,8 @@ export const scriptSchema = z.object({
       stableWaitMs: z.number().int().nonnegative().optional(),
       captureScreenshots: z.boolean().optional(),
       artifactsDir: z.string().optional(),
+      contextAttachments: z.boolean().optional(),
+      contextAttachmentsDir: z.string().optional(),
       storageStatePath: z.string().optional(),
       logNoiseFiltering: z.boolean().optional()
     })

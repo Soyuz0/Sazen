@@ -99,7 +99,12 @@ describe("visual diff", () => {
           postDomHash: "h1",
           domDiffSummary: { added: 0, removed: 0, changed: 0 },
           eventCount: 0,
-          screenshotPath: baselineShot
+          screenshotPath: baselineShot,
+          target: {
+            role: "button",
+            name: "Search",
+            boundingBox: { x: 1, y: 1, width: 2, height: 2 }
+          }
         }
       ];
 
@@ -123,7 +128,12 @@ describe("visual diff", () => {
           postDomHash: "h1b",
           domDiffSummary: { added: 0, removed: 0, changed: 0 },
           eventCount: 0,
-          screenshotPath: candidateShot
+          screenshotPath: candidateShot,
+          target: {
+            role: "button",
+            name: "Search",
+            boundingBox: { x: 1, y: 1, width: 2, height: 2 }
+          }
         }
       ];
 
@@ -170,6 +180,7 @@ describe("visual diff", () => {
       expect(report.missing).toBe(0);
       expect(report.entries).toHaveLength(1);
       expect(report.entries[0].actionType).toBe("navigate");
+      expect(report.entries[0].targetLabel).toBe("Search");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

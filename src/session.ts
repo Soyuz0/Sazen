@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
@@ -45,6 +45,8 @@ const DEFAULT_OPTIONS: Required<
     | "stableWaitMs"
     | "captureScreenshots"
     | "artifactsDir"
+    | "contextAttachments"
+    | "contextAttachmentsDir"
   >
 > = {
   headed: true,
@@ -60,7 +62,9 @@ const DEFAULT_OPTIONS: Required<
   actionTimeoutMs: 10_000,
   stableWaitMs: 120,
   captureScreenshots: true,
-  artifactsDir: ".agent-browser/artifacts"
+  artifactsDir: ".agent-browser/artifacts",
+  contextAttachments: true,
+  contextAttachmentsDir: ".agent-browser/context"
 };
 
 interface MockRule {
@@ -88,6 +92,13 @@ interface ActiveInterventionWindow {
   sources: Set<string>;
   preUrl: string;
   preDomHash: string;
+  preStorage?: SessionStorageSnapshot;
+  preStorageCapture?: Promise<void>;
+}
+
+interface SessionStorageSnapshot {
+  cookies: Map<string, string>;
+  localStorage: Map<string, string>;
 }
 
 export class AgentSession {
@@ -111,6 +122,7 @@ export class AgentSession {
   private executionPauseStartedAt: number | undefined;
   private executionPausedMsTotal = 0;
   private activeIntervention: ActiveInterventionWindow | null = null;
+  private lastKnownStorageSnapshot: SessionStorageSnapshot | null = null;
   private readonly executionResumeWaiters: Array<() => void> = [];
 
   constructor(private readonly options: AgentSessionOptions = {}) {}
@@ -153,6 +165,7 @@ export class AgentSession {
     this.observer.start();
 
     this.lastSnapshot = await takeDomSnapshot(this.page);
+    this.lastKnownStorageSnapshot = await this.captureStorageSnapshot();
   }
 
   subscribe(listener: (event: ObserverEvent) => void): () => void {
@@ -168,12 +181,22 @@ export class AgentSession {
         const startedAt = Date.now();
         this.executionPauseStartedAt = startedAt;
         const known = this.getKnownSnapshotState();
-        this.activeIntervention = {
+        const activeIntervention: ActiveInterventionWindow = {
           startedAt,
           sources: new Set([source]),
           preUrl: known.url,
-          preDomHash: known.domHash
+          preDomHash: known.domHash,
+          preStorage: this.lastKnownStorageSnapshot ?? undefined
         };
+        activeIntervention.preStorageCapture = this.captureStorageSnapshot()
+          .then((snapshot) => {
+            if (this.activeIntervention?.startedAt === startedAt) {
+              this.activeIntervention.preStorage = snapshot;
+            }
+            this.lastKnownStorageSnapshot = snapshot;
+          })
+          .catch(() => undefined);
+        this.activeIntervention = activeIntervention;
         this.pushControlTimelineEntry({
           actionType: "pause_start",
           phase: "start",
@@ -200,22 +223,36 @@ export class AgentSession {
       const elapsedMs = Math.max(0, finishedAt - startedAt);
       this.executionPausedMsTotal += elapsedMs;
       this.executionPauseStartedAt = undefined;
+      const intervention = this.activeIntervention;
+
+      await intervention?.preStorageCapture;
 
       const postSnapshot = await this.captureCurrentSnapshot().catch(() => this.lastSnapshot);
       if (postSnapshot) {
         this.lastSnapshot = postSnapshot;
       }
 
-      const intervention = this.activeIntervention;
       const preUrl = intervention?.preUrl ?? this.lastSnapshot?.url ?? "";
       const preDomHash = intervention?.preDomHash ?? this.lastSnapshot?.domHash ?? "";
       const postUrl = postSnapshot?.url ?? this.lastSnapshot?.url ?? preUrl;
       const postDomHash = postSnapshot?.domHash ?? this.lastSnapshot?.domHash ?? preDomHash;
       const sources =
         intervention && intervention.sources.size > 0
-          ? [...intervention.sources].sort((left, right) => left.localeCompare(right))
-          : [source];
+            ? [...intervention.sources].sort((left, right) => left.localeCompare(right))
+            : [source];
       const startedAtForJournal = intervention?.startedAt ?? startedAt;
+      const preStorage = intervention?.preStorage ?? this.lastKnownStorageSnapshot ?? undefined;
+      const postStorage = await this.captureStorageSnapshot().catch(() => undefined);
+      if (postStorage) {
+        this.lastKnownStorageSnapshot = postStorage;
+      }
+      const storageDelta =
+        preStorage && postStorage ? diffStorageSnapshots(preStorage, postStorage, 18) : undefined;
+      const reconciliationHints = buildReconciliationHints({
+        urlChanged: preUrl !== postUrl,
+        domChanged: preDomHash !== postDomHash,
+        storageDelta
+      });
 
       const journalEntry: InterventionJournalEntry = {
         startedAt: startedAtForJournal,
@@ -227,7 +264,9 @@ export class AgentSession {
         preDomHash,
         postDomHash,
         urlChanged: preUrl !== postUrl,
-        domChanged: preDomHash !== postDomHash
+        domChanged: preDomHash !== postDomHash,
+        storageDelta,
+        reconciliationHints
       };
       this.interventionJournal.push(journalEntry);
       this.pushControlTimelineEntry({
@@ -238,7 +277,8 @@ export class AgentSession {
         postDomHash,
         sources,
         urlChanged: journalEntry.urlChanged,
-        domChanged: journalEntry.domChanged
+        domChanged: journalEntry.domChanged,
+        hints: reconciliationHints
       });
       this.activeIntervention = null;
 
@@ -309,6 +349,7 @@ export class AgentSession {
     }
 
     this.lastSnapshot = postSnapshot;
+    this.lastKnownStorageSnapshot = await this.captureStorageSnapshot().catch(() => this.lastKnownStorageSnapshot);
     const domDiff = diffSnapshots(preSnapshot, postSnapshot);
     const events = observer.drain();
     let performance = defaultPerformanceMetrics();
@@ -343,6 +384,9 @@ export class AgentSession {
     }
 
     const finishedAt = Date.now();
+    const resolvedNode = resolvedNodeId
+      ? preSnapshot.nodes.find((candidate) => candidate.id === resolvedNodeId)
+      : undefined;
     const result: ActionResult = {
       actionId,
       sessionId: this.sessionId,
@@ -374,6 +418,13 @@ export class AgentSession {
       error
     };
 
+    try {
+      await this.recordContextAttachment(result);
+    } catch (contextError) {
+      const message = contextError instanceof Error ? contextError.message : String(contextError);
+      result.error = appendError(result.error, `Context attachment failed: ${message}`);
+    }
+
     this.traceRecords.push({
       action,
       result: {
@@ -402,7 +453,17 @@ export class AgentSession {
       domDiffSummary: result.domDiff.summary,
       eventCount: result.events.length,
       screenshotPath: result.screenshotPath,
-      annotatedScreenshotPath: result.annotatedScreenshotPath
+      annotatedScreenshotPath: result.annotatedScreenshotPath,
+      target:
+        resolvedNode || resolvedBoundingBox
+          ? {
+              nodeId: resolvedNodeId,
+              stableRef: resolvedNode?.stableRef,
+              role: resolvedNode?.role,
+              name: resolvedNode?.name,
+              boundingBox: resolvedBoundingBox
+            }
+          : undefined
     });
 
     noteOriginFromUrl(this.requiredOrigins, result.postSnapshot.url);
@@ -416,6 +477,7 @@ export class AgentSession {
   async snapshot(): Promise<DomSnapshot> {
     const page = this.requirePage();
     this.lastSnapshot = await takeDomSnapshot(page);
+    this.lastKnownStorageSnapshot = await this.captureStorageSnapshot().catch(() => this.lastKnownStorageSnapshot);
     return this.lastSnapshot;
   }
 
@@ -892,32 +954,18 @@ export class AgentSession {
     const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
     const mode = action.mode ?? "accept";
 
-    const acceptNames = [
-      /accept/i,
-      /agree/i,
-      /allow all/i,
-      /allow cookies/i,
-      /ok/i,
-      /got it/i,
-      /continue/i
-    ];
-    const rejectNames = [/reject/i, /decline/i, /deny/i, /necessary only/i];
-
-    const names = mode === "accept" ? acceptNames : rejectNames;
-
-    const selectorCandidates = [
-      "button[data-testid*='accept']",
-      "button[id*='accept']",
-      "button[class*='accept']",
-      "button[aria-label*='accept' i]",
-      "button[data-testid*='reject']",
-      "button[id*='reject']",
-      "button[class*='reject']"
-    ];
+    const region = await resolveConsentRegion(page, action.region ?? "auto");
+    const adapterHints = resolveConsentHooks({
+      mode,
+      strategy: action.strategy ?? "auto",
+      siteAdapter: action.siteAdapter,
+      url: safePageUrl(page, ""),
+      region
+    });
 
     const start = Date.now();
     while (Date.now() - start < timeout) {
-      for (const namePattern of names) {
+      for (const namePattern of adapterHints.namePatterns) {
         const roleButton = page.getByRole("button", { name: namePattern }).first();
         if (await roleButton.isVisible().catch(() => false)) {
           await roleButton.click({ timeout: 1_500 });
@@ -931,7 +979,7 @@ export class AgentSession {
         }
       }
 
-      for (const selector of selectorCandidates) {
+      for (const selector of adapterHints.selectors) {
         const locator = page.locator(selector).first();
         if (await locator.isVisible().catch(() => false)) {
           await locator.click({ timeout: 1_500 });
@@ -943,7 +991,9 @@ export class AgentSession {
     }
 
     if (action.requireFound) {
-      throw new Error(`No consent control found for mode '${mode}' within ${timeout}ms`);
+      throw new Error(
+        `No consent control found for mode '${mode}' within ${timeout}ms (region=${region}, adapter=${adapterHints.adapterLabel})`
+      );
     }
   }
 
@@ -1206,6 +1256,7 @@ export class AgentSession {
     sources: string[];
     urlChanged: boolean;
     domChanged: boolean;
+    hints?: string[];
   }): void {
     this.timelineEntries.push({
       index: this.timelineEntries.length,
@@ -1225,7 +1276,8 @@ export class AgentSession {
         elapsedMs: input.elapsedMs,
         sources: [...input.sources].sort((left, right) => left.localeCompare(right)),
         urlChanged: input.urlChanged,
-        domChanged: input.domChanged
+        domChanged: input.domChanged,
+        hints: input.hints
       }
     });
   }
@@ -1261,6 +1313,77 @@ export class AgentSession {
     } catch {
       return this.lastSnapshot;
     }
+  }
+
+  private async captureStorageSnapshot(): Promise<SessionStorageSnapshot> {
+    const context = this.requireContext();
+    const storage = await context.storageState();
+
+    const cookies = new Map<string, string>();
+    for (const cookie of storage.cookies ?? []) {
+      const key = `${cookie.domain}|${cookie.path}|${cookie.name}`;
+      cookies.set(key, `${cookie.value}|${cookie.expires}|${cookie.httpOnly}|${cookie.secure}|${cookie.sameSite}`);
+    }
+
+    const localStorage = new Map<string, string>();
+    for (const originEntry of storage.origins ?? []) {
+      for (const item of originEntry.localStorage ?? []) {
+        const key = `${originEntry.origin}|${item.name}`;
+        localStorage.set(key, item.value);
+      }
+    }
+
+    return {
+      cookies,
+      localStorage
+    };
+  }
+
+  private async recordContextAttachment(result: ActionResult): Promise<void> {
+    if (!(this.options.contextAttachments ?? DEFAULT_OPTIONS.contextAttachments)) {
+      return;
+    }
+
+    const preferredPath = result.annotatedScreenshotPath ?? result.screenshotPath;
+    if (!preferredPath) {
+      return;
+    }
+
+    const rootDir = resolve(this.options.contextAttachmentsDir ?? DEFAULT_OPTIONS.contextAttachmentsDir);
+    await mkdir(rootDir, { recursive: true });
+
+    const extension = preferredPath.endsWith(".png") ? "png" : "bin";
+    const latestPath = join(rootDir, `latest.${extension}`);
+    const timestamp = new Date(result.finishedAt).toISOString().replace(/[:.]/g, "-");
+    const archivePath = join(rootDir, `${timestamp}-${result.actionId}.${extension}`);
+    const manifestPath = join(rootDir, "latest.json");
+    const streamPath = join(rootDir, "attachments.jsonl");
+
+    await copyFile(preferredPath, latestPath);
+    await copyFile(preferredPath, archivePath);
+
+    const payload = {
+      attachedAt: new Date(result.finishedAt).toISOString(),
+      sessionId: this.sessionId,
+      actionId: result.actionId,
+      actionType: result.action.type,
+      sourcePath: preferredPath,
+      archivedPath: archivePath,
+      latestPath,
+      domHash: result.postSnapshot.domHash,
+      url: result.postSnapshot.url,
+      status: result.status
+    };
+
+    await writeFile(manifestPath, JSON.stringify(payload, null, 2), "utf8");
+    await appendFile(streamPath, `${JSON.stringify(payload)}\n`, "utf8");
+  }
+
+  getLatestIntervention(): InterventionJournalEntry | undefined {
+    if (this.interventionJournal.length === 0) {
+      return undefined;
+    }
+    return this.interventionJournal[this.interventionJournal.length - 1];
   }
 
   private async waitForExecutionResume(): Promise<void> {
@@ -1522,6 +1645,260 @@ function extractSelectorInvariant(action: Action): string | undefined {
   }
 
   return undefined;
+}
+
+async function resolveConsentRegion(
+  page: Page,
+  requested: "auto" | "global" | "eu" | "us" | "uk"
+): Promise<"global" | "eu" | "us" | "uk"> {
+  if (requested !== "auto") {
+    return requested;
+  }
+
+  const locale = await page
+    .evaluate(() => {
+      const docLang = document.documentElement.lang || "";
+      const navLang = navigator.language || "";
+      return `${docLang}|${navLang}`;
+    })
+    .catch(() => "");
+
+  const normalized = locale.toLowerCase();
+  if (/(^|\|)(en-gb|cy|ga|gd)/.test(normalized)) {
+    return "uk";
+  }
+  if (/(^|\|)(en-us|es-us)/.test(normalized)) {
+    return "us";
+  }
+  if (/(de|fr|es|it|nl|pt|pl|sv|da|fi|cs|sk|sl|hu|ro|bg|hr|et|lv|lt|el)/.test(normalized)) {
+    return "eu";
+  }
+  return "global";
+}
+
+function resolveConsentHooks(input: {
+  mode: "accept" | "reject";
+  strategy: "auto" | "generic" | "cmp";
+  siteAdapter?: string;
+  url: string;
+  region: "global" | "eu" | "us" | "uk";
+}): {
+  adapterLabel: string;
+  namePatterns: RegExp[];
+  selectors: string[];
+} {
+  const host = getHostFromUrl(input.url);
+
+  const genericAccept = [
+    /accept/i,
+    /agree/i,
+    /allow all/i,
+    /allow cookies/i,
+    /ok/i,
+    /got it/i,
+    /continue/i
+  ];
+  const genericReject = [/reject/i, /decline/i, /deny/i, /necessary only/i];
+
+  const regionalAccept: Record<string, RegExp[]> = {
+    eu: [/alle akzeptieren/i, /tout accepter/i, /aceptar/i, /accetta/i],
+    uk: [/accept all/i, /allow all/i],
+    us: [/accept all/i, /allow all/i],
+    global: []
+  };
+
+  const regionalReject: Record<string, RegExp[]> = {
+    eu: [/ablehnen/i, /refuser/i, /rechazar/i, /rifiuta/i, /nur notwendige/i],
+    uk: [/reject all/i, /decline all/i],
+    us: [/reject all/i, /decline all/i],
+    global: []
+  };
+
+  const cmpSelectors = {
+    accept: [
+      "#onetrust-accept-btn-handler",
+      "button[id*='onetrust-accept']",
+      "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+      "button[id*='didomi-notice-agree']",
+      "button[data-testid*='consent-accept']"
+    ],
+    reject: [
+      "#onetrust-reject-all-handler",
+      "button[id*='onetrust-reject']",
+      "#CybotCookiebotDialogBodyButtonDecline",
+      "button[id*='didomi-notice-disagree']",
+      "button[data-testid*='consent-reject']"
+    ]
+  } as const;
+
+  const siteSelectors: Record<string, { accept: string[]; reject: string[] }> = {
+    "github.com": {
+      accept: ["button[data-testid='cookie-consent-accept']", "button[aria-label*='Accept' i]"],
+      reject: ["button[data-testid='cookie-consent-reject']", "button[aria-label*='Reject' i]"]
+    },
+    "bbc.com": {
+      accept: ["button[data-testid*='accept']", "button[class*='accept']"],
+      reject: ["button[data-testid*='reject']", "button[class*='reject']"]
+    },
+    "wikipedia.org": {
+      accept: ["button[class*='wmf-button']"],
+      reject: ["button[data-testid*='reject']"]
+    }
+  };
+
+  const genericSelectors = {
+    accept: [
+      "button[data-testid*='accept']",
+      "button[id*='accept']",
+      "button[class*='accept']",
+      "button[aria-label*='accept' i]",
+      "button[name*='accept' i]"
+    ],
+    reject: [
+      "button[data-testid*='reject']",
+      "button[id*='reject']",
+      "button[class*='reject']",
+      "button[aria-label*='reject' i]",
+      "button[name*='reject' i]",
+      "button[aria-label*='decline' i]"
+    ]
+  } as const;
+
+  const modeKey = input.mode;
+  const names = [
+    ...(modeKey === "accept" ? genericAccept : genericReject),
+    ...(modeKey === "accept" ? regionalAccept[input.region] : regionalReject[input.region])
+  ];
+
+  const explicitSite = input.siteAdapter ?? "";
+  const siteConfig =
+    siteSelectors[explicitSite] ??
+    Object.entries(siteSelectors).find(([domain]) => host === domain || host.endsWith(`.${domain}`))?.[1];
+
+  const selectors: string[] = [];
+  let adapterLabel = "generic";
+
+  if (input.strategy !== "generic") {
+    selectors.push(...cmpSelectors[modeKey]);
+    adapterLabel = "cmp+generic";
+  }
+
+  if (siteConfig) {
+    selectors.push(...siteConfig[modeKey]);
+    adapterLabel = `site:${explicitSite || host}`;
+  }
+
+  if (input.strategy !== "cmp") {
+    selectors.push(...genericSelectors[modeKey]);
+  }
+
+  return {
+    adapterLabel,
+    namePatterns: names,
+    selectors: dedupeStringList(selectors)
+  };
+}
+
+function getHostFromUrl(input: string): string {
+  try {
+    return new URL(input).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function dedupeStringList(values: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    output.push(value);
+  }
+  return output;
+}
+
+function diffStorageSnapshots(
+  before: SessionStorageSnapshot,
+  after: SessionStorageSnapshot,
+  limit: number
+): InterventionJournalEntry["storageDelta"] {
+  const cookieDelta = diffNamedMap(before.cookies, after.cookies, limit);
+  const localStorageDelta = diffNamedMap(before.localStorage, after.localStorage, limit);
+
+  return {
+    cookies: cookieDelta,
+    localStorage: localStorageDelta
+  };
+}
+
+function diffNamedMap(
+  before: Map<string, string>,
+  after: Map<string, string>,
+  limit: number
+): { added: string[]; removed: string[]; changed: string[]; truncated: boolean } {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+
+  for (const [key, value] of after.entries()) {
+    if (!before.has(key)) {
+      added.push(key);
+      continue;
+    }
+
+    if (before.get(key) !== value) {
+      changed.push(key);
+    }
+  }
+
+  for (const key of before.keys()) {
+    if (!after.has(key)) {
+      removed.push(key);
+    }
+  }
+
+  const combined = added.length + removed.length + changed.length;
+  return {
+    added: added.slice(0, limit),
+    removed: removed.slice(0, limit),
+    changed: changed.slice(0, limit),
+    truncated: combined > limit * 3
+  };
+}
+
+function buildReconciliationHints(input: {
+  urlChanged: boolean;
+  domChanged: boolean;
+  storageDelta?: InterventionJournalEntry["storageDelta"];
+}): string[] {
+  const hints: string[] = [];
+  if (input.urlChanged) {
+    hints.push("URL changed during pause; run describe/snapshot before continuing actions.");
+  }
+  if (input.domChanged) {
+    hints.push("DOM changed during pause; re-validate selectors for next click/fill steps.");
+  }
+
+  const cookieDrift =
+    (input.storageDelta?.cookies.added.length ?? 0) +
+    (input.storageDelta?.cookies.removed.length ?? 0) +
+    (input.storageDelta?.cookies.changed.length ?? 0);
+  if (cookieDrift > 0) {
+    hints.push("Cookies changed during pause; re-check auth/session assertions.");
+  }
+
+  const localStorageDrift =
+    (input.storageDelta?.localStorage.added.length ?? 0) +
+    (input.storageDelta?.localStorage.removed.length ?? 0) +
+    (input.storageDelta?.localStorage.changed.length ?? 0);
+  if (localStorageDrift > 0) {
+    hints.push("Local storage changed during pause; verify stateful UI assumptions.");
+  }
+
+  return hints;
 }
 
 async function waitForEnterOrTimeout(timeoutMs: number): Promise<void> {

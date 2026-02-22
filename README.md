@@ -42,6 +42,7 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 - Executes atomic actions (`navigate`, `click`, `fill`, `assert`, `handleConsent`, etc.).
 - Returns structured post-action output (status, DOM diff, events, timings, screenshots).
 - Supports deterministic replay (`strict` and `relaxed` modes) and flake detection.
+- Auto-publishes latest screenshot artifacts into `.agent-browser/context/` for feedback-loop consumption.
 
 ### For humans
 - Can run headed and watch the page live.
@@ -106,13 +107,14 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 - `replay <trace>`: deterministic replay (strict/relaxed).
 - `flake <trace>`: repeated replay mismatch analysis.
 - `timeline <trace>`: terminal timeline view.
-- `timeline-html <trace>`: interactive HTML timeline report.
+- `timeline-html <trace>`: interactive HTML timeline inspector (grouping, search, detail pane).
 - `bundle <trace>`: triage bundle (trace + manifest + artifacts refs).
 - `visual-diff <baselineTrace> <candidateTrace>`: screenshot diff overlays.
 
 ### External agent adapter
 - `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
 - Methods include session lifecycle, action execution, and run controls (`pauseSession`, `resumeSession`, `getSessionState`).
+- MCP-parity aliases are available (`session.pause`, `session.resume`, `session.state`).
 
 ### Agent skill doc
 - `AGENT_BROWSER_SKILL.md`: load this into agent contexts as the runtime usage playbook.
@@ -168,7 +170,7 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
 - `run-control pause|resume|state --socket <path>` controls or inspects an active run from another terminal.
 - Trace output now includes:
   - `timeline` provenance markers: `pause_start`, `pause_resume`
-  - `interventions` journal entries (pre/post URL + DOM hash and change flags)
+  - `interventions` journal entries (pre/post URL + DOM hash, storage deltas, reconciliation hints)
 
 ### Browser overlay controls
 - By default, pages include a small top-right runtime panel with `Pause` and `Resume`.
@@ -178,8 +180,19 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
 ### Consent helper
 
 ```json
-{ "type": "handleConsent", "mode": "accept", "requireFound": true }
+{
+  "type": "handleConsent",
+  "mode": "accept",
+  "strategy": "auto",
+  "region": "eu",
+  "siteAdapter": "github.com",
+  "requireFound": true
+}
 ```
+
+- `strategy`: `auto` (CMP+site+generic), `cmp`, or `generic`.
+- `region`: `auto`, `global`, `eu`, `us`, `uk`.
+- `siteAdapter`: optional hostname hint for site-specific selectors.
 
 ---
 
@@ -225,6 +238,7 @@ Common options (available on most execution commands):
 - `reports/visual-diff/`: visual diff images/reports.
 - `reports/triage-bundles/`: packaged triage outputs.
 - `.agent-browser/artifacts/`: screenshots and action artifacts.
+- `.agent-browser/context/`: latest screenshot attachment handoff (`latest.json`, `attachments.jsonl`, `latest.png`).
 - `.agent-browser/sessions/`: saved sessions.
 - `.agent-browser/profiles/`: saved profiles.
 
@@ -320,6 +334,5 @@ Implemented now:
 
 Planned (tracked in `.plan`):
 - richer live timeline pane UI during execution (current live stream is row/JSONL based)
-- element-aware visual diff labels/semantic tags on diff outputs
-- storage/cookie delta journaling and richer post-resume reconciliation hints
+- checkpoint/resume role switching and visual baseline assert primitives
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

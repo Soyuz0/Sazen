@@ -86,6 +86,12 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented run-control socket surface for long `run` sessions (`run --control-socket`, `run-control pause|resume|state`).
 - Implemented pause intervention journal persistence in traces (`interventions`) with URL/DOM change metadata.
 - Implemented timeline provenance markers for run-level pause windows (`pause_start`, `pause_resume`).
+- Implemented consent strategy hooks with CMP + site adapters and region-aware variants (`handleConsent` strategy/region/siteAdapter).
+- Implemented richer timeline inspector UI in `timeline-html` (grouping, free-text search, detail pane).
+- Implemented element-aware visual diff overlays with target boxes and semantic labels in diff artifacts.
+- Implemented default-on screenshot context handoff (`.agent-browser/context/latest.json` + `attachments.jsonl`).
+- Implemented storage/cookie delta journaling + reconciliation hints inside intervention journal entries.
+- Implemented MCP-parity session control aliases in adapter runtime (`session.pause`, `session.resume`, `session.state`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -129,6 +135,9 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added overlay-node exclusion in snapshot capture to keep DOM hashes stable while runtime controls are visible.
 - Added integration coverage for run-level pause intervention journaling and trace provenance markers.
 - Updated visual diff comparison to ignore pause provenance timeline markers for stable action-to-action alignment.
+- Added fixture + integration coverage for region-aware consent handling and context attachment publication.
+- Added adapter coverage for MCP-parity control aliases.
+- Stabilized github smoke flow by navigating directly to `/login` and validating fill/wait interactions.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -210,12 +219,14 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Unified SDK contract:** one shared TypeScript/JSON schema for all three integrations to avoid per-agent drift.
 
 ## Pause/Resume Runtime (Post-Base Follow-Ups)
-- **Storage/cookie delta journaling:** extend intervention journal to include bounded storage/cookie diffs when allowed.
-- **Reconciliation hints:** attach suggested next actions after resume when URL/DOM drift is detected.
-- **MCP parity wiring:** mirror run-control semantics over future MCP transport.
+- **Completed:** storage/cookie delta journaling with bounded diff samples.
+- **Completed:** reconciliation hints attached when URL/DOM/storage drift occurs during pause.
+- **Completed:** MCP-parity alias methods (`session.pause|resume|state`) in adapter transport.
+- **Next follow-up:** add optional server-side policy for maximum retained intervention journal history.
 
 ## Feature Gaps Found During Dogfooding
-- **Consent/cookie strategy hooks:** extend generic accept/reject logic with site-specific adapters and region-aware variants.
-- **Timeline inspector UI:** richer grouping/searching and per-action deep panes beyond current HTML table/filters.
-- **Element-aware diff overlays:** annotate visual diff images with both target node boxes and semantic labels.
-- **Automatic screenshot context upload:** screenshot-producing commands should default to context attachment so agents can see artifacts immediately in feedback loops.
+- **Resolved:** consent/cookie strategy hooks via region-aware + site/CMP selector layering.
+- **Resolved:** timeline inspector UI with grouping, search, and row-level detail pane.
+- **Resolved:** element-aware diff overlays including target boxes and semantic labels.
+- **Resolved:** default screenshot context handoff for immediate feedback loops.
+- **New gap:** add filter presets and diff-only focus mode in timeline inspector for very long traces.

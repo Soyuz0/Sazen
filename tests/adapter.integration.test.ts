@@ -21,6 +21,9 @@ describe("adapter runtime", () => {
       const capabilities = (ping.result as { capabilities?: string[] }).capabilities ?? [];
       expect(capabilities).toContain("pauseSession");
       expect(capabilities).toContain("resumeSession");
+      expect(capabilities).toContain("session.pause");
+      expect(capabilities).toContain("session.resume");
+      expect(capabilities).toContain("session.state");
 
       const unknown = await runtime.handleRequest({ id: 2, method: "nope" });
       expect(unknown.ok).toBe(false);
@@ -166,6 +169,49 @@ describe("adapter runtime", () => {
       };
       expect(payload.count).toBe(2);
       expect(payload.pausedMs).toBeGreaterThan(0);
+    } finally {
+      await runtime.shutdown();
+    }
+  }, 120_000);
+
+  it("accepts MCP-parity session control aliases", async () => {
+    const runtime = new AdapterRuntime();
+
+    try {
+      const created = await runtime.handleRequest({
+        id: "create",
+        method: "createSession",
+        params: {
+          options: {
+            headed: false,
+            deterministic: true,
+            captureScreenshots: false
+          }
+        }
+      });
+      expect(created.ok).toBe(true);
+      const sessionId = (created.result as { sessionId: string }).sessionId;
+
+      const paused = await runtime.handleRequest({
+        id: "pause",
+        method: "session.pause",
+        params: { sessionId }
+      });
+      expect(paused.ok).toBe(true);
+
+      const resumed = await runtime.handleRequest({
+        id: "resume",
+        method: "session.resume",
+        params: { sessionId }
+      });
+      expect(resumed.ok).toBe(true);
+
+      const state = await runtime.handleRequest({
+        id: "state",
+        method: "session.state",
+        params: { sessionId }
+      });
+      expect(state.ok).toBe(true);
     } finally {
       await runtime.shutdown();
     }

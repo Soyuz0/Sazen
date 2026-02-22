@@ -586,6 +586,9 @@ function configureTimelineCommand(root: Command): void {
           console.log(
             `    control: phase=${entry.control.phase} elapsed=${entry.control.elapsedMs ?? 0}ms sources=${entry.control.sources.join(",") || "none"} urlChanged=${Boolean(entry.control.urlChanged)} domChanged=${Boolean(entry.control.domChanged)}`
           );
+          if ((entry.control.hints ?? []).length > 0) {
+            console.log(`    hints: ${(entry.control.hints ?? []).join(" | ")}`);
+          }
         }
       }
     });
@@ -918,6 +921,14 @@ function configureRunControlCommand(root: Command): void {
           `- run finished=${response.run.runFinished} current=${currentAction} completed=${response.run.completedActions}/${response.run.totalActions}`
         );
       }
+      if (response.latestIntervention) {
+        console.log(
+          `- intervention elapsed=${response.latestIntervention.elapsedMs}ms urlChanged=${response.latestIntervention.urlChanged} domChanged=${response.latestIntervention.domChanged}`
+        );
+        if ((response.latestIntervention.reconciliationHints ?? []).length > 0) {
+          console.log(`- hints: ${response.latestIntervention.reconciliationHints?.join(" | ")}`);
+        }
+      }
     });
 }
 
@@ -940,6 +951,12 @@ interface RunControlResponse {
   command: "pause" | "resume" | "state";
   state?: RunControlState;
   run?: RunControlRunState;
+  latestIntervention?: {
+    elapsedMs: number;
+    urlChanged: boolean;
+    domChanged: boolean;
+    reconciliationHints?: string[];
+  };
   error?: {
     message: string;
   };
@@ -1068,7 +1085,8 @@ async function handleRunControlCommand(
       ok: true,
       command,
       state,
-      run: getRunState()
+      run: getRunState(),
+      latestIntervention: toRunControlIntervention(session.getLatestIntervention())
     };
   }
 
@@ -1078,7 +1096,8 @@ async function handleRunControlCommand(
       ok: true,
       command,
       state,
-      run: getRunState()
+      run: getRunState(),
+      latestIntervention: toRunControlIntervention(session.getLatestIntervention())
     };
   }
 
@@ -1086,7 +1105,28 @@ async function handleRunControlCommand(
     ok: true,
     command,
     state: session.getExecutionControlState(),
-    run: getRunState()
+    run: getRunState(),
+    latestIntervention: toRunControlIntervention(session.getLatestIntervention())
+  };
+}
+
+function toRunControlIntervention(entry: ReturnType<AgentSession["getLatestIntervention"]>):
+  | {
+      elapsedMs: number;
+      urlChanged: boolean;
+      domChanged: boolean;
+      reconciliationHints?: string[];
+    }
+  | undefined {
+  if (!entry) {
+    return undefined;
+  }
+
+  return {
+    elapsedMs: entry.elapsedMs,
+    urlChanged: entry.urlChanged,
+    domChanged: entry.domChanged,
+    reconciliationHints: entry.reconciliationHints
   };
 }
 

@@ -9,6 +9,7 @@ Use `agent-browser` when you need:
 - structured DOM snapshots + diffs
 - trace capture/replay/flake analysis
 - action-level artifacts for debugging (screenshots, timeline, bundle)
+- immediate screenshot handoff via `.agent-browser/context/latest.json`
 
 ## Fast Start
 
@@ -59,7 +60,12 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 ## Pause Provenance
 
 - Run-level pause/resume events are recorded as timeline markers (`pause_start`, `pause_resume`).
-- Saved traces include `interventions` journal entries with pre/post URL + DOM hash and change flags.
+- Saved traces include `interventions` journal entries with pre/post URL + DOM hash, storage deltas, and reconciliation hints.
+
+## Consent Strategy Hooks
+
+- `handleConsent` supports `strategy` (`auto|cmp|generic`), `region` (`auto|global|eu|us|uk`), and optional `siteAdapter` host hint.
+- Use `strategy: auto` for mixed CMP + site-specific matching; use `cmp` when debugging common CMP frameworks directly.
 
 ## Adapter Runtime (`adapter-stdio`)
 
@@ -83,6 +89,7 @@ Send JSON lines:
 Notes:
 - Responses can arrive out of order; correlate by `id`.
 - Session operations are serialized per session for safety.
+- MCP-parity aliases are available: `session.pause`, `session.resume`, `session.state`.
 
 ## Validation Loop (Required)
 

@@ -7,16 +7,16 @@
   "actions": [
     {
       "type": "navigate",
-      "url": "https://github.com",
+      "url": "https://github.com/login",
       "waitUntil": "domcontentloaded"
     },
     {
-      "type": "click",
+      "type": "fill",
       "target": {
-        "kind": "roleName",
-        "role": "link",
-        "name": "Sign in"
-      }
+        "kind": "css",
+        "selector": "#login_field"
+      },
+      "value": "agent-browser@example.com"
     },
     {
       "type": "waitFor",

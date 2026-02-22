@@ -212,6 +212,9 @@ export interface HandleConsentAction {
   type: "handleConsent";
   mode?: "accept" | "reject";
   requireFound?: boolean;
+  strategy?: "auto" | "generic" | "cmp";
+  siteAdapter?: string;
+  region?: "auto" | "global" | "eu" | "us" | "uk";
   timeoutMs?: number;
 }
 
@@ -334,12 +337,20 @@ export interface TraceTimelineEntry {
   eventCount: number;
   screenshotPath?: string;
   annotatedScreenshotPath?: string;
+  target?: {
+    nodeId?: string;
+    stableRef?: string;
+    role?: string;
+    name?: string;
+    boundingBox?: BoundingBox;
+  };
   control?: {
     phase: "start" | "resume";
     elapsedMs?: number;
     sources: string[];
     urlChanged?: boolean;
     domChanged?: boolean;
+    hints?: string[];
   };
 }
 
@@ -354,6 +365,21 @@ export interface InterventionJournalEntry {
   postDomHash: string;
   urlChanged: boolean;
   domChanged: boolean;
+  storageDelta?: {
+    cookies: {
+      added: string[];
+      removed: string[];
+      changed: string[];
+      truncated: boolean;
+    };
+    localStorage: {
+      added: string[];
+      removed: string[];
+      changed: string[];
+      truncated: boolean;
+    };
+  };
+  reconciliationHints?: string[];
 }
 
 export interface SavedTrace {
@@ -390,6 +416,8 @@ export interface AgentSessionOptions {
   stableWaitMs?: number;
   captureScreenshots?: boolean;
   artifactsDir?: string;
+  contextAttachments?: boolean;
+  contextAttachmentsDir?: string;
   storageStatePath?: string;
   logRedactionPatterns?: RegExp[];
   logNoiseFiltering?: boolean;
@@ -490,6 +518,9 @@ export interface VisualDiffEntry {
   width?: number;
   height?: number;
   diffImagePath?: string;
+  targetLabel?: string;
+  baselineTargetBox?: BoundingBox;
+  candidateTargetBox?: BoundingBox;
 }
 
 export interface VisualDiffReport {

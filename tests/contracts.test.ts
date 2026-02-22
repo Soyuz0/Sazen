@@ -85,9 +85,16 @@ describe("contracts", () => {
     const consentAction = parseAction({
       type: "handleConsent",
       mode: "accept",
-      requireFound: true
+      requireFound: true,
+      strategy: "auto",
+      region: "eu",
+      siteAdapter: "github.com"
     });
     expect(consentAction.type).toBe("handleConsent");
+    if (consentAction.type === "handleConsent") {
+      expect(consentAction.region).toBe("eu");
+      expect(consentAction.siteAdapter).toBe("github.com");
+    }
 
     const bboxAssert = parseAction({
       type: "assert",

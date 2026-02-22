@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Regional Consent Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", sans-serif;
+        background: #f8fafc;
+      }
+
+      .banner {
+        position: fixed;
+        inset: auto 0 0 0;
+        background: #0f172a;
+        color: #f8fafc;
+        padding: 14px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+
+      #onetrust-accept-btn-handler {
+        background: #22c55e;
+        color: #052e16;
+      }
+
+      #onetrust-reject-all-handler {
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+
+      #state {
+        margin: 30px;
+        font-size: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <p id="state">pending</p>
+
+    <section class="banner" role="dialog" aria-label="cookie-banner">
+      <span>Cookie Einstellungen</span>
+      <button id="onetrust-accept-btn-handler" type="button">Alle akzeptieren</button>
+      <button id="onetrust-reject-all-handler" type="button">Nur notwendige</button>
+    </section>
+
+    <script>
+      const state = document.querySelector("#state");
+      const banner = document.querySelector(".banner");
+
+      document.querySelector("#onetrust-accept-btn-handler").addEventListener("click", () => {
+        state.textContent = "accepted";
+        banner.remove();
+      });
+
+      document.querySelector("#onetrust-reject-all-handler").addEventListener("click", () => {
+        state.textContent = "rejected";
+        banner.remove();
+      });
+    </script>
+  </body>
+</html>
