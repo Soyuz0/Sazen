@@ -192,6 +192,28 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
 - `url_contains`
 - `title_contains`
 
+### waitFor conditions
+- `timeout` (fixed sleep)
+- `selector` (attached/detached/visible/hidden)
+- `network_idle` (page idle)
+- `network_response` (wait for response matching URL/method/status/body predicates)
+
+Network-aware wait example:
+
+```json
+{
+  "type": "waitFor",
+  "condition": {
+    "kind": "network_response",
+    "urlContains": "/api/status",
+    "method": "GET",
+    "statusMin": 200,
+    "statusMax": 299,
+    "bodyIncludes": "ready"
+  }
+}
+```
+
 Visual baseline assert example:
 
 ```json
@@ -432,8 +454,11 @@ Implemented now:
 - assertion DSL, consent helper, profiles, stability modes
 - annotated per-action screenshots
 - run-level pause/resume controls with trace intervention journaling and provenance markers
+- trace-scoped role switching, visual baseline assert, live timeline TUI, selector health + run index
+- network-aware wait primitives via `waitFor.condition.kind = network_response`
 
 Planned (tracked in `.plan`):
-- richer live timeline pane UI during execution (current live stream is row/JSONL based)
-- checkpoint/resume role switching and visual baseline assert primitives
+- auto-retry with evidence policy
+- session identity clarity in adapter responses
+- checkpoint/resume for long flows
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Network Wait Fixture</title>
+  </head>
+  <body>
+    <h1>Network Wait Fixture</h1>
+    <button id="load-data" type="button">Load status</button>
+    <p id="status">idle</p>
+
+    <script>
+      const button = document.getElementById("load-data");
+      const status = document.getElementById("status");
+
+      button?.addEventListener("click", () => {
+        status.textContent = "loading";
+        window.setTimeout(async () => {
+          try {
+            const response = await fetch("/network-wait-response.json", {
+              method: "GET",
+              headers: {
+                "x-fixture": "network-wait"
+              }
+            });
+            const payload = await response.json();
+            status.textContent = `${payload.state} (${payload.source})`;
+            console.log("[fixture] network wait completed", payload.state);
+          } catch (error) {
+            status.textContent = "error";
+            console.error("[fixture] network wait error", error);
+          }
+        }, 140);
+      });
+    </script>
+  </body>
+</html>

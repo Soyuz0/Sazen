@@ -65,6 +65,7 @@ Use timeline HTML presets and diff-only focus mode for long traces when narrowin
 - Use semantic targets first (`roleName`, `stableRef`, `node`) and CSS only as fallback.
 - Use `switchProfile` inside scripts when a single run needs role transitions (for example, user to admin).
 - Use `assert` with `visual_baseline` when step-level screenshot gating is needed.
+- Use `waitFor` with `condition.kind = network_response` when synchronizing on API responses (URL/method/status/body) instead of only DOM heuristics.
 - If strict replay mismatches on public/dynamic pages, retry with relaxed replay + selector invariants.
 - For unstable traces, run `flake` before changing selectors.
 

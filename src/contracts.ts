@@ -32,6 +32,18 @@ const waitConditionSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("network_idle")
+  }),
+  z.object({
+    kind: z.literal("network_response"),
+    urlContains: z.string().min(1).optional(),
+    urlMatches: z.string().min(1).optional(),
+    method: z.string().min(1).optional(),
+    status: z.number().int().min(100).max(599).optional(),
+    statusMin: z.number().int().min(100).max(599).optional(),
+    statusMax: z.number().int().min(100).max(599).optional(),
+    bodyIncludes: z.string().min(1).optional(),
+    bodyMatches: z.string().min(1).optional(),
+    ignoreCase: z.boolean().optional()
   })
 ]);
 
@@ -160,6 +172,39 @@ export const actionSchema = actionSchemaCore.superRefine((value, context) => {
         code: z.ZodIssueCode.custom,
         message: "Either nodeId or target is required",
         path: ["target"]
+      });
+    }
+  }
+
+  if (value.type === "waitFor" && value.condition.kind === "network_response") {
+    const condition = value.condition;
+    const hasPredicate =
+      condition.urlContains !== undefined ||
+      condition.urlMatches !== undefined ||
+      condition.method !== undefined ||
+      condition.status !== undefined ||
+      condition.statusMin !== undefined ||
+      condition.statusMax !== undefined ||
+      condition.bodyIncludes !== undefined ||
+      condition.bodyMatches !== undefined;
+
+    if (!hasPredicate) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "network_response wait requires at least one predicate (url/method/status/body)",
+        path: ["condition", "kind"]
+      });
+    }
+
+    if (
+      condition.statusMin !== undefined &&
+      condition.statusMax !== undefined &&
+      condition.statusMin > condition.statusMax
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "statusMin must be less than or equal to statusMax",
+        path: ["condition", "statusMin"]
       });
     }
   }

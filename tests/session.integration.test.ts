@@ -440,6 +440,72 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("supports network-aware waitFor predicates on url/status/body", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-network-wait-"));
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      const nav = await session.perform({
+        type: "navigate",
+        url: `${fixture.baseUrl}/network-wait.html`
+      });
+      expect(nav.status).toBe("ok");
+
+      const trigger = await session.perform({
+        type: "click",
+        target: {
+          kind: "css",
+          selector: "#load-data"
+        }
+      });
+      expect(trigger.status).toBe("ok");
+
+      const waited = await session.perform({
+        type: "waitFor",
+        condition: {
+          kind: "network_response",
+          urlContains: "/network-wait-response.json",
+          method: "get",
+          status: 200,
+          bodyIncludes: "ready"
+        }
+      });
+      expect(waited.status).toBe("ok");
+
+      const assertStatus = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "selector",
+          selector: "#status",
+          textContains: "ready"
+        }
+      });
+      expect(assertStatus.status).toBe("ok");
+
+      const failingWait = await session.perform({
+        type: "waitFor",
+        timeoutMs: 600,
+        condition: {
+          kind: "network_response",
+          urlContains: "/network-wait-response.json",
+          bodyIncludes: "never-present"
+        }
+      });
+      expect(failingWait.status).toBe("retryable_error");
+      expect(failingWait.error?.message.toLowerCase()).toContain("timeout");
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("writes context attachment manifest for screenshot-producing actions", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-context-attach-"));
     const contextDir = join(tempDir, "context");

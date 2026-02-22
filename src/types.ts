@@ -237,6 +237,18 @@ export type WaitCondition =
     }
   | {
       kind: "network_idle";
+    }
+  | {
+      kind: "network_response";
+      urlContains?: string;
+      urlMatches?: string;
+      method?: string;
+      status?: number;
+      statusMin?: number;
+      statusMax?: number;
+      bodyIncludes?: string;
+      bodyMatches?: string;
+      ignoreCase?: boolean;
     };
 
 export interface WaitForAction {

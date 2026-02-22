@@ -1203,6 +1203,52 @@ export class AgentSession {
       return;
     }
 
+    if (condition.kind === "network_response") {
+      const urlMatcher = compileOptionalRegExp(condition.urlMatches, condition.ignoreCase);
+      const bodyMatcher = compileOptionalRegExp(condition.bodyMatches, condition.ignoreCase);
+      const method = condition.method?.trim().toUpperCase();
+      const bodyNeedle = normalizePredicateNeedle(condition.bodyIncludes, condition.ignoreCase);
+
+      await page.waitForResponse(
+        async (response) => {
+          const url = response.url();
+          const requestMethod = response.request().method().toUpperCase();
+          const status = response.status();
+
+          if (!matchesUrlPredicate(url, condition.urlContains, urlMatcher, condition.ignoreCase)) {
+            return false;
+          }
+
+          if (method && requestMethod !== method) {
+            return false;
+          }
+
+          if (!matchesStatusPredicate(status, condition.status, condition.statusMin, condition.statusMax)) {
+            return false;
+          }
+
+          if (!bodyNeedle && !bodyMatcher) {
+            return true;
+          }
+
+          let bodyText: string;
+          try {
+            bodyText = await response.text();
+          } catch {
+            return false;
+          }
+
+          if (!matchesBodyPredicate(bodyText, bodyNeedle, bodyMatcher, condition.ignoreCase)) {
+            return false;
+          }
+
+          return true;
+        },
+        { timeout }
+      );
+      return;
+    }
+
     await page.waitForLoadState("networkidle", { timeout });
   }
 
@@ -2139,6 +2185,85 @@ function dedupeStringList(values: string[]): string[] {
     output.push(value);
   }
   return output;
+}
+
+function compileOptionalRegExp(pattern: string | undefined, ignoreCase = false): RegExp | undefined {
+  if (!pattern) {
+    return undefined;
+  }
+
+  try {
+    return new RegExp(pattern, ignoreCase ? "i" : undefined);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid regex '${pattern}': ${reason}`);
+  }
+}
+
+function normalizePredicateNeedle(value: string | undefined, ignoreCase = false): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return ignoreCase ? value.toLowerCase() : value;
+}
+
+function matchesUrlPredicate(
+  url: string,
+  urlContains: string | undefined,
+  urlMatcher: RegExp | undefined,
+  ignoreCase = false
+): boolean {
+  if (urlContains !== undefined) {
+    const normalizedUrl = ignoreCase ? url.toLowerCase() : url;
+    const needle = ignoreCase ? urlContains.toLowerCase() : urlContains;
+    if (!normalizedUrl.includes(needle)) {
+      return false;
+    }
+  }
+
+  if (urlMatcher && !urlMatcher.test(url)) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesStatusPredicate(
+  status: number,
+  exact: number | undefined,
+  min: number | undefined,
+  max: number | undefined
+): boolean {
+  if (exact !== undefined && status !== exact) {
+    return false;
+  }
+  if (min !== undefined && status < min) {
+    return false;
+  }
+  if (max !== undefined && status > max) {
+    return false;
+  }
+  return true;
+}
+
+function matchesBodyPredicate(
+  bodyText: string,
+  bodyNeedle: string | undefined,
+  bodyMatcher: RegExp | undefined,
+  ignoreCase = false
+): boolean {
+  if (bodyNeedle !== undefined) {
+    const normalizedBody = ignoreCase ? bodyText.toLowerCase() : bodyText;
+    if (!normalizedBody.includes(bodyNeedle)) {
+      return false;
+    }
+  }
+
+  if (bodyMatcher && !bodyMatcher.test(bodyText)) {
+    return false;
+  }
+
+  return true;
 }
 
 function diffStorageSnapshots(

@@ -152,6 +152,30 @@ describe("contracts", () => {
     if (profileSwitch.type === "switchProfile") {
       expect(profileSwitch.profile).toBe("admin");
     }
+
+    const networkWait = parseAction({
+      type: "waitFor",
+      condition: {
+        kind: "network_response",
+        urlContains: "/api/",
+        method: "GET",
+        statusMin: 200,
+        statusMax: 299,
+        bodyIncludes: "ready"
+      }
+    });
+    expect(networkWait.type).toBe("waitFor");
+  });
+
+  it("rejects network_response wait without predicates", () => {
+    expect(() =>
+      parseAction({
+        type: "waitFor",
+        condition: {
+          kind: "network_response"
+        }
+      })
+    ).toThrowError();
   });
 
   it("parses loop scripts with snapshot and assert predicates", () => {
