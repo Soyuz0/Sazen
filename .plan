@@ -114,6 +114,11 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented first-class OpenCode adapter bridge (`adapter-opencode`) with `oc.*` alias mapping onto the unified SDK contract methods.
 - Implemented Claude Code adapter bridge (`adapter-claude`) with `cc.*` aliases, slash-command dispatch, and stable response envelope metadata.
 - Implemented Codex local adapter service (`adapter-codex`) with deterministic `/v1/action`, `/v1/replay`, and `/v1/timeline` endpoints plus session lifecycle routes.
+- Implemented loop logging ergonomics with throttled/summary branch-aware output controls (`--loop-log-every`, `--loop-summary-only`, `--loop-log-branches-only-on-change`).
+- Implemented run-control socket readiness waiting (`run-control --wait-for-socket-ms`) to avoid startup control races.
+- Implemented selector-health policy gates with threshold exits (`--max-ambiguity-rate`, `--max-fallback-rate`).
+- Implemented loop KPI sidecar report emission (`--loop-metrics-out`, `*.loop-metrics.json`).
+- Implemented context helper UX and history indexing (`context-peek`, `.sazen/context/context-index.json`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -211,12 +216,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
   - Existing replay/visual/timeline suites stay green.
 
 ### Near-Term (v0.x) - Remaining
-- **Loop logging ergonomics:** add long-run loop output controls (`--loop-log-every`, `--loop-summary-only`, `--loop-log-branches-only-on-change`) to reduce operator noise.
-- **Run-control socket readiness UX:** add `run-control --wait-for-socket-ms <n>` to avoid startup race (`ENOENT`) when controlling fresh runs.
-- **Selector-health policy gates:** add CI-friendly thresholds (ambiguity/fallback rates) with non-zero exit support.
-- **Context peek helper:** add `context-peek` command to print latest screenshot/context metadata (`actionId`, `url`, `domHash`, paths).
-- **Loop KPI sidecar report:** emit `loop-metrics.json` with iteration timing percentiles, branch frequency, and stop-reason summary.
-- **Context history index:** add `.sazen/context/context-index.json` rolling index for run/action-level screenshot retrieval.
+- (none; dogfooding suggestion tranche completed)
 
 ### Near-Term (v0.x) - Completed
 - **Resilient selector healing:** completed via ranked fallback locator chain (test id/id/href/name/role/css path) plus ambiguity ranking and disambiguation.
@@ -224,6 +224,12 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Trace-scoped role switching:** completed via `switchProfile` action for profile selection directly inside scripts/replay sessions.
 - **Visual diff assertions:** completed via `assert` condition kind `visual_baseline` with baseline thresholding and diff evidence.
 - **Live timeline TUI:** completed via `run --live-timeline --live-timeline-mode tui` with terminal auto-refresh and artifact/error summaries.
+- **Loop logging ergonomics:** completed via `loop` output controls (`--loop-log-every`, `--loop-summary-only`, `--loop-log-branches-only-on-change`).
+- **Run-control socket readiness UX:** completed via `run-control --wait-for-socket-ms` startup waiting.
+- **Selector-health policy gates:** completed via ambiguity/fallback threshold exits in `selector-health`.
+- **Context peek helper:** completed via `context-peek` command for latest screenshot/context metadata.
+- **Loop KPI sidecar report:** completed via `loop` KPI JSON sidecars (`--loop-metrics-out`, `*.loop-metrics.json`).
+- **Context history index:** completed via rolling `.sazen/context/context-index.json` persistence.
 
 ### Prioritized Post-Dogfooding Additions (Impact vs Effort)
 - **P0 - Completed: Graceful interrupt/shutdown hardening** (idempotent session/adapter shutdown, cancellable interrupt waiters, close-race noise suppression).
@@ -271,9 +277,9 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Resolved:** element-aware diff overlays including target boxes and semantic labels.
 - **Resolved:** default screenshot context handoff for immediate feedback loops.
 - **Resolved:** timeline inspector filter presets and diff-only focus mode for long traces.
-- **Open:** loop output can be noisy in long iterations; add loop log throttling/summary controls.
-- **Open:** `run-control` can race control socket startup; add readiness wait/retry option.
-- **Open:** ambiguity/fallback signals should support CI gating before hard failures.
-- **Open:** loop analytics should expose first-class KPI sidecars for trend tracking.
-- **Open:** context handoff needs easier historical browseability (`context-index.json`).
-- **Open:** screenshot ingestion expectations need explicit helper UX (`context-peek`).
+- **Resolved:** loop output ergonomics via throttle/summary/branch-change logging controls.
+- **Resolved:** `run-control` startup race handling via socket readiness wait option.
+- **Resolved:** selector-health ambiguity/fallback CI gates with threshold exits.
+- **Resolved:** loop KPI sidecar report output for iteration/branch trend visibility.
+- **Resolved:** context handoff historical browseability via rolling context index.
+- **Resolved:** explicit screenshot-ingestion helper UX via `context-peek`.

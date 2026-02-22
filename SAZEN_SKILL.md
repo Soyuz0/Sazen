@@ -142,6 +142,10 @@ Many commands reuse these options:
   - `--save <name>`
   - `--logs` print loop action events
   - `--max-iterations <n>` override script max iterations
+  - `--loop-metrics-out <path>` write loop KPI sidecar JSON
+  - `--loop-log-every <n>` print detailed rows every N iterations
+  - `--loop-summary-only` print compact summaries only
+  - `--loop-log-branches-only-on-change` print branch details only when outcomes change
   - same intervention/retry flags as `run`
 
 `act <action>`
@@ -156,6 +160,7 @@ Many commands reuse these options:
 - Options:
   - `--socket <path>` required socket path
   - `--timeout <ms>` request timeout (default 5000)
+  - `--wait-for-socket-ms <ms>` wait for control socket readiness before sending
   - `--json` print raw response
 
 ### 4.4 Replay and diagnostics commands
@@ -217,6 +222,14 @@ Many commands reuse these options:
 - Purpose: selector fragility report from trace
 - Options:
   - `--out <path>`
+  - `--max-ambiguity-rate <n>` fail when ambiguity rate exceeds threshold
+  - `--max-fallback-rate <n>` fail when fallback usage rate exceeds threshold
+  - `--json`
+
+`context-peek`
+- Purpose: show latest screenshot context metadata for action->feedback loops
+- Options:
+  - `--context-dir <path>` (default `.sazen/context`)
   - `--json`
 
 `run-index <tracePath>`
@@ -519,6 +532,7 @@ Key output paths:
 - `reports/triage-bundles/`
 - `.sazen/artifacts/`
 - `.sazen/context/latest.json` and `.sazen/context/attachments.jsonl`
+- `.sazen/context/context-index.json`
 - `.sazen/sessions/`
 - `.sazen/profiles/`
 
