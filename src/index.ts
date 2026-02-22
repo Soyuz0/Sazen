@@ -14,3 +14,4 @@ export * from "./timeline-html.js";
 export * from "./visual.js";
 export * from "./annotate.js";
 export * from "./adapter.js";
+export * from "./plugin-registry.js";

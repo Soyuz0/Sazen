@@ -347,6 +347,7 @@ Loop scripts support repeated **action -> observe -> branch** execution with opt
 - `strategy`: `auto` (CMP+site+generic), `cmp`, or `generic`.
 - `region`: `auto`, `global`, `eu`, `us`, `uk`.
 - `siteAdapter`: optional hostname hint for site-specific selectors.
+- Consent matching now resolves through a plugin registry (ordered site adapter, CMP, then generic plugins).
 
 ---
 
@@ -503,7 +504,8 @@ Implemented now:
 - network-aware wait primitives via `waitFor.condition.kind = network_response`
 - bounded action auto-retry policy with per-attempt evidence + final rationale in traces
 - cross-run drift monitor aggregation and recommendation reporting
+- plugin registry core for consent/login adapter composition (consent plugins active)
 
 Planned (tracked in `.plan`):
-- consent/login plugin registry
+- initial login plugin pack on top of registry core
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

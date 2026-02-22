@@ -10,6 +10,7 @@ import {
   installLayoutShiftCapture
 } from "./deterministic.js";
 import { BrowserObserver, collectPerformanceMetrics } from "./observer.js";
+import { resolveConsentHooksWithRegistry } from "./plugin-registry.js";
 import { diffSnapshots, takeDomSnapshot } from "./snapshot.js";
 import { comparePngFiles } from "./visual.js";
 import type {
@@ -1215,7 +1216,7 @@ export class AgentSession {
     const mode = action.mode ?? "accept";
 
     const region = await resolveConsentRegion(page, action.region ?? "auto");
-    const adapterHints = resolveConsentHooks({
+    const adapterHints = resolveConsentHooksWithRegistry({
       mode,
       strategy: action.strategy ?? "auto",
       siteAdapter: action.siteAdapter,
@@ -2331,150 +2332,6 @@ async function resolveConsentRegion(
     return "eu";
   }
   return "global";
-}
-
-function resolveConsentHooks(input: {
-  mode: "accept" | "reject";
-  strategy: "auto" | "generic" | "cmp";
-  siteAdapter?: string;
-  url: string;
-  region: "global" | "eu" | "us" | "uk";
-}): {
-  adapterLabel: string;
-  namePatterns: RegExp[];
-  selectors: string[];
-} {
-  const host = getHostFromUrl(input.url);
-
-  const genericAccept = [
-    /accept/i,
-    /agree/i,
-    /allow all/i,
-    /allow cookies/i,
-    /ok/i,
-    /got it/i,
-    /continue/i
-  ];
-  const genericReject = [/reject/i, /decline/i, /deny/i, /necessary only/i];
-
-  const regionalAccept: Record<string, RegExp[]> = {
-    eu: [/alle akzeptieren/i, /tout accepter/i, /aceptar/i, /accetta/i],
-    uk: [/accept all/i, /allow all/i],
-    us: [/accept all/i, /allow all/i],
-    global: []
-  };
-
-  const regionalReject: Record<string, RegExp[]> = {
-    eu: [/ablehnen/i, /refuser/i, /rechazar/i, /rifiuta/i, /nur notwendige/i],
-    uk: [/reject all/i, /decline all/i],
-    us: [/reject all/i, /decline all/i],
-    global: []
-  };
-
-  const cmpSelectors = {
-    accept: [
-      "#onetrust-accept-btn-handler",
-      "button[id*='onetrust-accept']",
-      "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
-      "button[id*='didomi-notice-agree']",
-      "button[data-testid*='consent-accept']"
-    ],
-    reject: [
-      "#onetrust-reject-all-handler",
-      "button[id*='onetrust-reject']",
-      "#CybotCookiebotDialogBodyButtonDecline",
-      "button[id*='didomi-notice-disagree']",
-      "button[data-testid*='consent-reject']"
-    ]
-  } as const;
-
-  const siteSelectors: Record<string, { accept: string[]; reject: string[] }> = {
-    "github.com": {
-      accept: ["button[data-testid='cookie-consent-accept']", "button[aria-label*='Accept' i]"],
-      reject: ["button[data-testid='cookie-consent-reject']", "button[aria-label*='Reject' i]"]
-    },
-    "bbc.com": {
-      accept: ["button[data-testid*='accept']", "button[class*='accept']"],
-      reject: ["button[data-testid*='reject']", "button[class*='reject']"]
-    },
-    "wikipedia.org": {
-      accept: ["button[class*='wmf-button']"],
-      reject: ["button[data-testid*='reject']"]
-    }
-  };
-
-  const genericSelectors = {
-    accept: [
-      "button[data-testid*='accept']",
-      "button[id*='accept']",
-      "button[class*='accept']",
-      "button[aria-label*='accept' i]",
-      "button[name*='accept' i]"
-    ],
-    reject: [
-      "button[data-testid*='reject']",
-      "button[id*='reject']",
-      "button[class*='reject']",
-      "button[aria-label*='reject' i]",
-      "button[name*='reject' i]",
-      "button[aria-label*='decline' i]"
-    ]
-  } as const;
-
-  const modeKey = input.mode;
-  const names = [
-    ...(modeKey === "accept" ? genericAccept : genericReject),
-    ...(modeKey === "accept" ? regionalAccept[input.region] : regionalReject[input.region])
-  ];
-
-  const explicitSite = input.siteAdapter ?? "";
-  const siteConfig =
-    siteSelectors[explicitSite] ??
-    Object.entries(siteSelectors).find(([domain]) => host === domain || host.endsWith(`.${domain}`))?.[1];
-
-  const selectors: string[] = [];
-  let adapterLabel = "generic";
-
-  if (input.strategy !== "generic") {
-    selectors.push(...cmpSelectors[modeKey]);
-    adapterLabel = "cmp+generic";
-  }
-
-  if (siteConfig) {
-    selectors.push(...siteConfig[modeKey]);
-    adapterLabel = `site:${explicitSite || host}`;
-  }
-
-  if (input.strategy !== "cmp") {
-    selectors.push(...genericSelectors[modeKey]);
-  }
-
-  return {
-    adapterLabel,
-    namePatterns: names,
-    selectors: dedupeStringList(selectors)
-  };
-}
-
-function getHostFromUrl(input: string): string {
-  try {
-    return new URL(input).hostname.toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-function dedupeStringList(values: string[]): string[] {
-  const seen = new Set<string>();
-  const output: string[] = [];
-  for (const value of values) {
-    if (seen.has(value)) {
-      continue;
-    }
-    seen.add(value);
-    output.push(value);
-  }
-  return output;
 }
 
 function compileOptionalRegExp(pattern: string | undefined, ignoreCase = false): RegExp | undefined {

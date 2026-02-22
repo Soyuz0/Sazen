@@ -90,6 +90,7 @@ Use timeline HTML presets and diff-only focus mode for long traces when narrowin
 
 - `handleConsent` supports `strategy` (`auto|cmp|generic`), `region` (`auto|global|eu|us|uk`), and optional `siteAdapter` host hint.
 - Use `strategy: auto` for mixed CMP + site-specific matching; use `cmp` when debugging common CMP frameworks directly.
+- Consent resolution is plugin-registry based (site adapter plugin, CMP plugin, generic plugin in deterministic priority order).
 
 ## Adapter Runtime (`adapter-stdio`)
 
