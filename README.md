@@ -1,6 +1,16 @@
-# Agent Browser
+# Sazen
 
-Agent Browser is an agent-first Chromium runtime for deterministic browser automation.
+The agent first broswer.
+
+```text
+  ____    _    ______ _____ _   _
+ / ___|  / \  |__  / | ____| \ | |
+ \___ \ / _ \   / /  |  _| |  \| |
+  ___) / ___ \ / /_  | |___| |\  |
+ |____/_/   \_/____| |_____|_| \_|
+```
+
+Sazen is an agent-first Chromium runtime for deterministic browser automation.
 
 It is designed for two audiences at the same time:
 - agents that need typed, replayable browser actions
@@ -10,7 +20,7 @@ The runtime executes atomic actions, captures structured state after each action
 
 ## Project Scope
 
-Agent Browser combines:
+Sazen combines:
 - deterministic execution controls (stability profiles, replay checks, bounded retries)
 - structured page state (semantic snapshots, DOM hash/diff metadata, event streams)
 - rich diagnostics (timeline, HTML timeline, visual diff overlays, triage bundles)
@@ -21,13 +31,34 @@ Agent Browser combines:
 
 Requirements:
 - Node.js 20+
-- Playwright Chromium dependencies for your OS
 
-Setup:
+Recommended (one-line installer):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash
+```
+
+The installer supports Linux, macOS, and Windows bash environments (Git Bash/WSL).
+
+Installer options:
+
+```bash
+# install a specific release tag or branch
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash -s -- --version v0.1.0
+
+# skip PATH edits
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash -s -- --no-modify-path
+
+# skip browser install (run playwright install later)
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash -s -- --skip-browser-install
+```
+
+Manual setup (from source checkout):
 
 ```bash
 npm install
 npm run install:browser
+npm run build
 ```
 
 ## Quick Start
@@ -159,9 +190,9 @@ Codex HTTP endpoints:
 - `reports/timeline-html/`: HTML timeline reports
 - `reports/visual-diff/`: visual diff output
 - `reports/triage-bundles/`: bundle artifacts
-- `.agent-browser/artifacts/`: screenshots and per-action files
-- `.agent-browser/context/`: latest screenshot handoff (`latest.json`, `attachments.jsonl`)
-- `.agent-browser/sessions/` and `.agent-browser/profiles/`: persisted state
+- `.sazen/artifacts/`: screenshots and per-action files
+- `.sazen/context/`: latest screenshot handoff (`latest.json`, `attachments.jsonl`)
+- `.sazen/sessions/` and `.sazen/profiles/`: persisted state
 
 ## Validation and Development
 
@@ -176,6 +207,6 @@ npm run smoke:sites -- --operation-timeout-ms 60000 --action-timeout-ms 30000 --
 
 ## Related Docs
 
-- `AGENT_BROWSER_SKILL.md`: concise operations playbook for autonomous agents
+- `SAZEN_SKILL.md`: concise operations playbook for autonomous agents
 - `agents.md`: execution rules for agent behavior and repo workflow
 - `.plan`: current roadmap, completed milestones, and future priorities

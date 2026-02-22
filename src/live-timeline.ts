@@ -73,7 +73,7 @@ export function renderLiveTimelineTuiFrame(input: LiveTimelineFrameInput): strin
     .map((entry) => `#${entry.index + 1} ${entry.actionType}: ${entry.errorMessage}`);
 
   const lines: string[] = [];
-  lines.push("Agent Browser Live Timeline (TUI)");
+  lines.push("Sazen Live Timeline (TUI)");
   if (input.scriptPath) {
     lines.push(`Script: ${truncate(input.scriptPath, columns - 8)}`);
   }

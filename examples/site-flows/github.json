@@ -16,7 +16,7 @@
         "kind": "css",
         "selector": "#login_field"
       },
-      "value": "agent-browser@example.com"
+      "value": "sazen@example.com"
     },
     {
       "type": "waitFor",

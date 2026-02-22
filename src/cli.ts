@@ -34,8 +34,8 @@ import type { Action, ActionResult, AgentSessionOptions, ReplayMode, SavedSessio
 
 const program = new Command();
 program
-  .name("agent-browser")
-  .description("Agent-first visible Chromium runtime")
+  .name("sazen")
+  .description("The agent first broswer")
   .version("0.1.0");
 
 configureOpenCommand(program);
@@ -189,7 +189,7 @@ function configureRunCommand(root: Command): void {
     .option("--timeline-stream <path>", "Write live timeline JSONL stream to file")
     .option("--control-socket <path>", "Enable run control socket at this path")
     .option("--resume-from-checkpoint <name>", "Resume run from a named checkpoint")
-    .option("--checkpoint-manifest <path>", "Checkpoint manifest path (default under .agent-browser/checkpoints)")
+    .option("--checkpoint-manifest <path>", "Checkpoint manifest path (default under .sazen/checkpoints)")
     .option(
       "--max-interventions-retained <n>",
       "Retain at most this many intervention journal entries"
@@ -706,7 +706,7 @@ function configureProfileSaveCommand(root: Command): void {
     .description("Open a URL, allow manual login, then save a named profile")
     .argument("<name>", "Profile name")
     .argument("<url>", "Starting URL")
-    .option("--profiles-root <path>", "Profiles root directory", ".agent-browser/profiles")
+    .option("--profiles-root <path>", "Profiles root directory", ".sazen/profiles")
     .option("--auto-save-ms <ms>", "Auto-save profile after this many ms")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
@@ -719,7 +719,7 @@ function configureProfileSaveCommand(root: Command): void {
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (name: string, url: string, options: Record<string, string | boolean>) => {
       const profilesRoot =
-        typeof options.profilesRoot === "string" ? options.profilesRoot : ".agent-browser/profiles";
+        typeof options.profilesRoot === "string" ? options.profilesRoot : ".sazen/profiles";
       const session = new AgentSession(toSessionOptions(options));
       await session.start();
 
@@ -752,7 +752,7 @@ function configureProfileLoadCommand(root: Command): void {
     .command("profile-load")
     .description("Load a named profile and keep browser open")
     .argument("<name>", "Profile name")
-    .option("--profiles-root <path>", "Profiles root directory", ".agent-browser/profiles")
+    .option("--profiles-root <path>", "Profiles root directory", ".sazen/profiles")
     .option("--close-after-ms <ms>", "Automatically close profile after this many ms")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
@@ -765,7 +765,7 @@ function configureProfileLoadCommand(root: Command): void {
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (name: string, options: Record<string, string | boolean>) => {
       const profilesRoot =
-        typeof options.profilesRoot === "string" ? options.profilesRoot : ".agent-browser/profiles";
+        typeof options.profilesRoot === "string" ? options.profilesRoot : ".sazen/profiles";
       const session = await AgentSession.loadSavedSession(name, toSessionOptions(options), profilesRoot);
 
       const unsubscribe = session.subscribe((event) => {
@@ -1198,7 +1198,7 @@ function configureLoadCommand(root: Command): void {
     .command("load")
     .description("Load a saved session and keep browser open")
     .argument("<name>", "Saved session name")
-    .option("--sessions-root <path>", "Session root directory", ".agent-browser/sessions")
+    .option("--sessions-root <path>", "Session root directory", ".sazen/sessions")
     .option("--headless", "Run Chromium headless", false)
     .option("--no-deterministic", "Disable deterministic mode")
     .option("--slowmo <ms>", "Playwright slow motion delay in ms")
@@ -1209,7 +1209,7 @@ function configureLoadCommand(root: Command): void {
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (name: string, options: Record<string, string | boolean>) => {
       const rootDir =
-        typeof options.sessionsRoot === "string" ? options.sessionsRoot : ".agent-browser/sessions";
+        typeof options.sessionsRoot === "string" ? options.sessionsRoot : ".sazen/sessions";
       const session = await AgentSession.loadSavedSession(name, toSessionOptions(options), rootDir);
       const unsubscribe = session.subscribe((event) => {
         console.log(formatEvent(event));
@@ -1899,7 +1899,7 @@ function resolveCheckpointManifestPath(scriptPath: string, rawPath: string | boo
     return resolve(rawPath);
   }
 
-  return resolve(".agent-browser/checkpoints", `${basename(scriptPath, ".json")}.manifest.json`);
+  return resolve(".sazen/checkpoints", `${basename(scriptPath, ".json")}.manifest.json`);
 }
 
 async function loadCheckpointResumeTarget(input: {

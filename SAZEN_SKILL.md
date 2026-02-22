@@ -1,4 +1,4 @@
-# Agent Browser Skill (Complete Operations Guide)
+# Sazen Skill (Complete Operations Guide)
 
 Load this skill whenever an agent needs to drive browsers in this repository.
 
@@ -12,9 +12,9 @@ This guide is intentionally detailed. It covers:
 
 Use this as the working playbook for autonomous execution.
 
-## 1) What Agent Browser Is
+## 1) What Sazen Is
 
-Agent Browser is an agent-first Chromium runtime that executes typed actions and returns structured evidence for every step.
+Sazen is an agent-first Chromium runtime that executes typed actions and returns structured evidence for every step.
 
 Core capabilities:
 - deterministic execution controls for reproducibility
@@ -102,7 +102,7 @@ Many commands reuse these options:
 `profile-save <name> <url>`
 - Purpose: manual login flow then save reusable profile
 - Extra options:
-  - `--profiles-root <path>` (default `.agent-browser/profiles`)
+  - `--profiles-root <path>` (default `.sazen/profiles`)
   - `--auto-save-ms <ms>` auto-save timer
 
 `profile-load <name>`
@@ -113,7 +113,7 @@ Many commands reuse these options:
 
 `load <name>`
 - Purpose: load saved session and keep browser open
-- Extra option: `--sessions-root <path>` (default `.agent-browser/sessions`)
+- Extra option: `--sessions-root <path>` (default `.sazen/sessions`)
 
 ### 4.3 Execution commands
 
@@ -517,10 +517,10 @@ Key output paths:
 - `reports/timeline-html/`
 - `reports/visual-diff/`
 - `reports/triage-bundles/`
-- `.agent-browser/artifacts/`
-- `.agent-browser/context/latest.json` and `.agent-browser/context/attachments.jsonl`
-- `.agent-browser/sessions/`
-- `.agent-browser/profiles/`
+- `.sazen/artifacts/`
+- `.sazen/context/latest.json` and `.sazen/context/attachments.jsonl`
+- `.sazen/sessions/`
+- `.sazen/profiles/`
 
 ## 9) Adapter Protocols
 

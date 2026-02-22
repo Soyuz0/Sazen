@@ -3,7 +3,7 @@
 These rules define how autonomous agents should operate when using this browser runtime.
 
 ## Skill Loading
-- Load `AGENT_BROWSER_SKILL.md` as operational context before running complex browser tasks.
+- Load `SAZEN_SKILL.md` as operational context before running complex browser tasks.
 - Treat the skill doc as the execution playbook (command patterns, adapter protocol, validation loop).
 
 ## 1) Safety and Scope
@@ -81,7 +81,7 @@ These rules define how autonomous agents should operate when using this browser 
 
 ## 12) Dogfooding Requirement
 - While building features, run the runtime against a real app flow (local fixture or target project).
-- Use the agent browser itself to execute and validate actions, not only isolated unit checks.
+- Use Sazen itself to execute and validate actions, not only isolated unit checks.
 - Confirm real-time logs/action output and action-result envelopes during these runs.
 - Validate viewport-dependent behavior by testing multiple resolutions.
 - For unattended/long automation runs, prefer headless mode unless visual validation is the goal.
@@ -115,7 +115,7 @@ These rules define how autonomous agents should operate when using this browser 
 ## 17) Current Workflow (Execution Order)
 - Start each tranche by reconciling `.plan` with actual code status; mark already-implemented items as completed/partial before adding new work.
 - Implement highest-priority remaining roadmap items first (P0 before P1/P2), then continue downward.
-- After code changes, update operational docs in the same tranche (`README.md`, `AGENT_BROWSER_SKILL.md`, `.plan`, and this file when workflow rules change).
+- After code changes, update operational docs in the same tranche (`README.md`, `SAZEN_SKILL.md`, `.plan`, and this file when workflow rules change).
 - Validate in this order unless a faster scoped check is clearly sufficient: `npm run build`, `npm test`, then `npm run smoke:sites -- --operation-timeout-ms 60000 --action-timeout-ms 30000 --stability-profile balanced`.
 - Treat a feature as done only when code + tests + docs + plan status are aligned and smoke coverage is green.
 - Commit and push each validated feature slice to `origin/master` (or active branch) before starting the next high-priority item.

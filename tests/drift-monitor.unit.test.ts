@@ -9,7 +9,7 @@ import {
 
 describe("drift monitor", () => {
   it("aggregates recurring failure signatures across matrix runs", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-drift-monitor-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-drift-monitor-"));
     const historyPath = join(tempDir, "history.json");
     const aggregatePath = join(tempDir, "aggregate.json");
 

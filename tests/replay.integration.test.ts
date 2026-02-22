@@ -19,7 +19,7 @@ describe("replay", () => {
   });
 
   it("supports strict and relaxed replay modes", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-replay-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-replay-"));
     const tracePath = join(tempDir, "trace.json");
 
     await createFixtureTrace(tracePath, fixture.baseUrl);
@@ -70,7 +70,7 @@ describe("replay", () => {
   }, 120_000);
 
   it("fails early when preflight origins are unreachable", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-preflight-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-preflight-"));
     const tracePath = join(tempDir, "trace.json");
 
     const trace: SavedTrace = {
@@ -109,7 +109,7 @@ describe("replay", () => {
   }, 60_000);
 
   it("reports unstable actions with flake detection", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-flake-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-flake-"));
     const tracePath = join(tempDir, "trace.json");
 
     await createFixtureTrace(tracePath, fixture.baseUrl);
@@ -144,7 +144,7 @@ describe("replay", () => {
   }, 120_000);
 
   it("enforces selector invariants in relaxed mode when available", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-selector-invariant-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-selector-invariant-"));
     const tracePath = join(tempDir, "trace.json");
 
     await createFixtureTraceWithSelectorWait(tracePath, fixture.baseUrl);

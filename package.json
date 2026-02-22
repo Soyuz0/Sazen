@@ -1,11 +1,11 @@
 {
-  "name": "agent-browser",
+  "name": "sazen",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Agent-first visible Chromium runtime for deterministic project testing",
+  "description": "The agent first broswer",
   "bin": {
-    "agent-browser": "dist/cli.js"
+    "sazen": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

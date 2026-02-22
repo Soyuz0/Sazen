@@ -198,7 +198,7 @@ describe("contracts", () => {
     const profileSwitch = parseAction({
       type: "switchProfile",
       profile: "admin",
-      profilesRoot: ".agent-browser/profiles",
+      profilesRoot: ".sazen/profiles",
       waitUntil: "domcontentloaded"
     });
     expect(profileSwitch.type).toBe("switchProfile");
@@ -222,7 +222,7 @@ describe("contracts", () => {
     const checkpointAction = parseAction({
       type: "checkpoint",
       name: "after-login",
-      rootDir: ".agent-browser/checkpoints"
+      rootDir: ".sazen/checkpoints"
     });
     expect(checkpointAction.type).toBe("checkpoint");
     if (checkpointAction.type === "checkpoint") {

@@ -1,4 +1,4 @@
-# Agent-First Browser Plan
+# Sazen Plan
 
 ## Product Goal
 Build an agent-first Chromium runtime where structured state is primary, actions are atomic/replayable, and humans can watch execution in a visible browser with real-time logs.
@@ -89,7 +89,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented consent strategy hooks with CMP + site adapters and region-aware variants (`handleConsent` strategy/region/siteAdapter).
 - Implemented richer timeline inspector UI in `timeline-html` (grouping, free-text search, detail pane).
 - Implemented element-aware visual diff overlays with target boxes and semantic labels in diff artifacts.
-- Implemented default-on screenshot context handoff (`.agent-browser/context/latest.json` + `attachments.jsonl`).
+- Implemented default-on screenshot context handoff (`.sazen/context/latest.json` + `attachments.jsonl`).
 - Implemented storage/cookie delta journaling + reconciliation hints inside intervention journal entries.
 - Implemented MCP-parity session control aliases in adapter runtime (`session.pause`, `session.resume`, `session.state`).
 - Implemented first-class `loop` runner with action->observe->branch flow and optional iteration cap (`loop` command + loop script schema).
@@ -215,7 +215,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 
 ### Near-Term (v0.x) - Completed
 - **Resilient selector healing:** completed via ranked fallback locator chain (test id/id/href/name/role/css path) plus ambiguity ranking and disambiguation.
-- **Context-native screenshot handoff (default-on):** completed via automatic attachment publication under `.agent-browser/context/` (`latest.json`, `attachments.jsonl`, latest/archive images).
+- **Context-native screenshot handoff (default-on):** completed via automatic attachment publication under `.sazen/context/` (`latest.json`, `attachments.jsonl`, latest/archive images).
 - **Trace-scoped role switching:** completed via `switchProfile` action for profile selection directly inside scripts/replay sessions.
 - **Visual diff assertions:** completed via `assert` condition kind `visual_baseline` with baseline thresholding and diff evidence.
 - **Live timeline TUI:** completed via `run --live-timeline --live-timeline-mode tui` with terminal auto-refresh and artifact/error summaries.

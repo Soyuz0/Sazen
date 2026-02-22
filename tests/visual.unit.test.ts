@@ -7,7 +7,7 @@ import { comparePngFiles, compareTraceVisuals } from "../src/visual.js";
 
 describe("visual diff", () => {
   it("detects identical images", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-browser-visual-identical-"));
+    const dir = await mkdtemp(join(tmpdir(), "sazen-visual-identical-"));
     const baseline = join(dir, "baseline.png");
     const candidate = join(dir, "candidate.png");
     const diffPath = join(dir, "diff.png");
@@ -28,7 +28,7 @@ describe("visual diff", () => {
   });
 
   it("detects changed pixels", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-browser-visual-diff-"));
+    const dir = await mkdtemp(join(tmpdir(), "sazen-visual-diff-"));
     const baseline = join(dir, "baseline.png");
     const candidate = join(dir, "candidate.png");
 
@@ -53,7 +53,7 @@ describe("visual diff", () => {
   });
 
   it("reports size mismatch", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-browser-visual-size-"));
+    const dir = await mkdtemp(join(tmpdir(), "sazen-visual-size-"));
     const baseline = join(dir, "baseline.png");
     const candidate = join(dir, "candidate.png");
 
@@ -69,7 +69,7 @@ describe("visual diff", () => {
   });
 
   it("ignores pause provenance markers when comparing traces", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-browser-visual-trace-"));
+    const dir = await mkdtemp(join(tmpdir(), "sazen-visual-trace-"));
     const baselineTrace = join(dir, "baseline-trace.json");
     const candidateTrace = join(dir, "candidate-trace.json");
     const baselineShot = join(dir, "baseline.png");

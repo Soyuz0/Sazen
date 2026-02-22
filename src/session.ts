@@ -66,9 +66,9 @@ const DEFAULT_OPTIONS: Required<
   actionTimeoutMs: 10_000,
   stableWaitMs: 120,
   captureScreenshots: true,
-  artifactsDir: ".agent-browser/artifacts",
+  artifactsDir: ".sazen/artifacts",
   contextAttachments: true,
-  contextAttachmentsDir: ".agent-browser/context",
+  contextAttachmentsDir: ".sazen/context",
   maxActionAttempts: 1,
   retryBackoffMs: 150
 };
@@ -588,7 +588,7 @@ export class AgentSession {
     return absolutePath;
   }
 
-  async saveSession(name: string, rootDir = ".agent-browser/sessions"): Promise<string> {
+  async saveSession(name: string, rootDir = ".sazen/sessions"): Promise<string> {
     const context = this.requireContext();
     const page = this.requirePage();
 
@@ -614,7 +614,7 @@ export class AgentSession {
   static async loadSavedSession(
     name: string,
     options: AgentSessionOptions = {},
-    rootDir = ".agent-browser/sessions"
+    rootDir = ".sazen/sessions"
   ): Promise<AgentSession> {
     const manifestPath = resolve(rootDir, name, "session.json");
     const raw = await readFile(manifestPath, "utf8");
@@ -646,7 +646,7 @@ export class AgentSession {
     this.observer = null;
     this.mockRoutingReady = false;
 
-    const profilesRoot = action.profilesRoot ?? ".agent-browser/profiles";
+    const profilesRoot = action.profilesRoot ?? ".sazen/profiles";
     const manifestPath = resolve(profilesRoot, action.profile, "session.json");
     const rawManifest = await readFile(manifestPath, "utf8");
     const manifest = JSON.parse(rawManifest) as SavedSession;
@@ -847,7 +847,7 @@ export class AgentSession {
       case "checkpoint": {
         const manifestPath = await this.saveSession(
           action.name,
-          action.rootDir ?? ".agent-browser/checkpoints"
+          action.rootDir ?? ".sazen/checkpoints"
         );
         return {
           checkpointName: action.name,
@@ -1614,7 +1614,7 @@ export class AgentSession {
   private async installBrowserOverlay(): Promise<void> {
     const page = this.requirePage();
 
-    await page.exposeBinding("__agentBrowserControl", async (_source, request: unknown) => {
+    await page.exposeBinding("__sazenControl", async (_source, request: unknown) => {
       const command =
         typeof request === "object" && request !== null && "type" in request
           ? String((request as { type: unknown }).type)
@@ -1635,13 +1635,13 @@ export class AgentSession {
 
     await page.addInitScript(() => {
       const globalState = window as Window & {
-        __agentBrowserControl?: (request: { type: string }) => Promise<{
+        __sazenControl?: (request: { type: string }) => Promise<{
           paused?: boolean;
           pausedMs?: number;
         }>;
       };
 
-      const rootAttr = "data-agent-browser-overlay";
+      const rootAttr = "data-sazen-overlay";
       const rootValue = "root";
 
       const install = () => {
@@ -1709,12 +1709,12 @@ export class AgentSession {
         };
 
         const send = async (type: "pause" | "resume" | "state") => {
-          if (!globalState.__agentBrowserControl) {
+          if (!globalState.__sazenControl) {
             return;
           }
 
           try {
-            const state = await globalState.__agentBrowserControl({ type });
+            const state = await globalState.__sazenControl({ type });
             setPausedState(Boolean(state?.paused), Number(state?.pausedMs ?? 0));
           } catch {
             // Ignore overlay update failures.

@@ -21,7 +21,7 @@ describe("agent session integration", () => {
   it(
     "runs a real flow, emits events, saves trace, and replays deterministically",
     async () => {
-      const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-flow-"));
+      const tempDir = await mkdtemp(join(tmpdir(), "sazen-flow-"));
       const tracePath = join(tempDir, "trace.json");
 
       const session = new AgentSession({
@@ -144,7 +144,7 @@ describe("agent session integration", () => {
   );
 
   it("saves and reloads a session manifest", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-session-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-session-"));
     const rootDir = join(tempDir, "sessions");
     const sessionName = "saved";
 
@@ -187,7 +187,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("switches profiles within a single trace using switchProfile action", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-switch-profile-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-switch-profile-"));
     const profilesRoot = join(tempDir, "profiles");
     const profileUrl = `${fixture.baseUrl}/profile-switch.html`;
 
@@ -274,7 +274,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("captures named checkpoints as resumable session manifests", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-checkpoint-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-checkpoint-"));
     const checkpointsRoot = join(tempDir, "checkpoints");
 
     const session = new AgentSession({
@@ -337,7 +337,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("handles ambiguous role targets by selecting actionable candidates", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-ambiguous-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-ambiguous-"));
 
     const session = new AgentSession({
       headed: false,
@@ -381,7 +381,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("supports setting viewport resolution during a run", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-viewport-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-viewport-"));
 
     const session = new AgentSession({
       headed: false,
@@ -415,7 +415,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("handles consent banners and supports assert actions", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-consent-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-consent-"));
 
     const session = new AgentSession({
       headed: false,
@@ -463,7 +463,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("applies region-aware consent strategy hooks", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-consent-region-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-consent-region-"));
 
     const session = new AgentSession({
       headed: false,
@@ -504,7 +504,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("handles login actions through registry-backed login plugins", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-login-plugin-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-login-plugin-"));
 
     const session = new AgentSession({
       headed: false,
@@ -548,7 +548,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("supports network-aware waitFor predicates on url/status/body", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-network-wait-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-network-wait-"));
 
     const session = new AgentSession({
       headed: false,
@@ -614,7 +614,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("retries retryable actions with per-attempt evidence and rationale", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-retry-policy-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-retry-policy-"));
     const tracePath = join(tempDir, "trace.json");
 
     const session = new AgentSession({
@@ -700,7 +700,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("writes context attachment manifest for screenshot-producing actions", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-context-attach-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-context-attach-"));
     const contextDir = join(tempDir, "context");
 
     const session = new AgentSession({
@@ -733,7 +733,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("supports visual baseline asserts within assert actions", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-visual-assert-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-visual-assert-"));
 
     const session = new AgentSession({
       headed: false,
@@ -787,7 +787,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("supports pause action and captures intervention summary", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-pause-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-pause-"));
 
     const session = new AgentSession({
       headed: false,
@@ -818,7 +818,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("records run-level pause interventions and provenance markers in traces", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-intervention-"));
     const tracePath = join(tempDir, "trace.json");
 
     const session = new AgentSession({
@@ -866,7 +866,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("enforces max retained intervention journal entries when configured", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-retention-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-intervention-retention-"));
     const tracePath = join(tempDir, "trace.json");
 
     const session = new AgentSession({
@@ -910,7 +910,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("respects per-source intervention quotas when trimming journal entries", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-source-quota-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-intervention-source-quota-"));
     const tracePath = join(tempDir, "trace.json");
 
     const session = new AgentSession({
@@ -959,7 +959,7 @@ describe("agent session integration", () => {
   }, 120_000);
 
   it("prefers retaining high-impact interventions in severity retention mode", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-severity-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-intervention-severity-"));
     const tracePath = join(tempDir, "trace.json");
 
     const session = new AgentSession({

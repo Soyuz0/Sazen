@@ -39,7 +39,7 @@ describe("live timeline tui", () => {
     });
 
     expect(frame.startsWith("\u001b[2J\u001b[H")).toBe(true);
-    expect(frame).toContain("Agent Browser Live Timeline (TUI)");
+    expect(frame).toContain("Sazen Live Timeline (TUI)");
     expect(frame).toContain("Completed 2/3 | Failed 1");
     expect(frame).toContain("Recent Artifacts:");
     expect(frame).toContain("/tmp/shot-1.png");

@@ -6,7 +6,7 @@ import { buildRunArtifactIndex } from "../src/run-index.js";
 
 describe("run artifact index", () => {
   it("collects trace-linked timeline, bundle, visual diff, and error metadata", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-run-index-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "sazen-run-index-"));
 
     const tracePath = join(tempDir, "sample-trace.json");
     const timelineHtmlDir = join(tempDir, "reports", "timeline-html");

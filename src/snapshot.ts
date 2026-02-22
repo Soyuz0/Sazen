@@ -335,7 +335,7 @@ export async function takeDomSnapshot(
     const nodes: RawNode[] = [];
 
     for (const el of allElements) {
-      if (el.closest("[data-agent-browser-overlay='root']")) {
+      if (el.closest("[data-sazen-overlay='root']")) {
         continue;
       }
 

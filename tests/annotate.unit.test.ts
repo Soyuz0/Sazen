@@ -8,7 +8,7 @@ import type { DomSnapshot } from "../src/types.js";
 
 describe("screenshot annotation", () => {
   it("writes an annotated screenshot when a target node is available", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "agent-browser-annotate-"));
+    const dir = await mkdtemp(join(tmpdir(), "sazen-annotate-"));
     const screenshotPath = join(dir, "base.png");
 
     try {
