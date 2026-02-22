@@ -37,11 +37,11 @@ describe("session timing helpers", () => {
     const withSecondSource = session.pauseExecution("adapter");
     expect(withSecondSource.sources).toEqual(["adapter", "overlay"]);
 
-    const partiallyResumed = session.resumeExecution("overlay");
+    const partiallyResumed = await session.resumeExecution("overlay");
     expect(partiallyResumed.paused).toBe(true);
     expect(partiallyResumed.sources).toEqual(["adapter"]);
 
-    const resumed = session.resumeExecution("adapter");
+    const resumed = await session.resumeExecution("adapter");
     expect(resumed.paused).toBe(false);
     expect(resumed.pausedMs).toBeGreaterThan(0);
     expect(resumed.sources).toEqual([]);

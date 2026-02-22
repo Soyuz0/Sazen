@@ -1,9 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { replayTrace } from "../src/replay.js";
 import { AgentSession } from "../src/session.js";
+import type { SavedTrace } from "../src/types.js";
 import { startFixtureServer, type RunningFixtureServer } from "./helpers/fixtureServer.js";
 
 describe("agent session integration", () => {
@@ -336,6 +337,52 @@ describe("agent session integration", () => {
       expect(paused.pauseSummary?.mode).toBe("timeout");
       expect((paused.pauseSummary?.elapsedMs ?? 0) >= 180).toBe(true);
       expect(paused.pauseSummary?.urlChanged).toBe(false);
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("records run-level pause interventions and provenance markers in traces", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-"));
+    const tracePath = join(tempDir, "trace.json");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      await session.perform({ type: "navigate", url: fixture.baseUrl });
+
+      const paused = session.pauseExecution("test");
+      expect(paused.paused).toBe(true);
+
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 100);
+      });
+
+      const resumed = await session.resumeExecution("test");
+      expect(resumed.paused).toBe(false);
+
+      const snapshot = await session.perform({ type: "snapshot" });
+      expect(snapshot.status).toBe("ok");
+
+      await session.saveTrace(tracePath);
+      const raw = await readFile(tracePath, "utf8");
+      const trace = JSON.parse(raw) as SavedTrace;
+
+      expect((trace.interventions ?? []).length).toBe(1);
+      const intervention = (trace.interventions ?? [])[0];
+      expect(intervention.elapsedMs).toBeGreaterThanOrEqual(80);
+      expect(intervention.sources).toContain("test");
+
+      const actions = trace.timeline?.map((entry) => entry.actionType) ?? [];
+      expect(actions).toContain("pause_start");
+      expect(actions).toContain("pause_resume");
     } finally {
       await session.close();
       await rm(tempDir, { recursive: true, force: true });

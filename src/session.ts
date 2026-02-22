@@ -18,6 +18,7 @@ import type {
   AgentSessionOptions,
   BoundingBox,
   DomSnapshot,
+  InterventionJournalEntry,
   NodeTarget,
   ObserverEvent,
   SavedSession,
@@ -82,6 +83,13 @@ interface ResolvedLocator {
   node?: AgentNode;
 }
 
+interface ActiveInterventionWindow {
+  startedAt: number;
+  sources: Set<string>;
+  preUrl: string;
+  preDomHash: string;
+}
+
 export class AgentSession {
   readonly sessionId = randomUUID();
   readonly tabId = "tab_1";
@@ -95,12 +103,14 @@ export class AgentSession {
   private lastSnapshot: DomSnapshot | null = null;
   private readonly traceRecords: TraceRecord[] = [];
   private readonly timelineEntries: TraceTimelineEntry[] = [];
+  private readonly interventionJournal: InterventionJournalEntry[] = [];
   private readonly requiredOrigins = new Set<string>();
   private readonly mockRules: MockRule[] = [];
   private mockRoutingReady = false;
   private readonly executionPauseSources = new Set<string>();
   private executionPauseStartedAt: number | undefined;
   private executionPausedMsTotal = 0;
+  private activeIntervention: ActiveInterventionWindow | null = null;
   private readonly executionResumeWaiters: Array<() => void> = [];
 
   constructor(private readonly options: AgentSessionOptions = {}) {}
@@ -155,7 +165,27 @@ export class AgentSession {
   pauseExecution(source = "api"): { paused: boolean; pausedMs: number; sources: string[] } {
     if (!this.executionPauseSources.has(source)) {
       if (this.executionPauseSources.size === 0) {
-        this.executionPauseStartedAt = Date.now();
+        const startedAt = Date.now();
+        this.executionPauseStartedAt = startedAt;
+        const known = this.getKnownSnapshotState();
+        this.activeIntervention = {
+          startedAt,
+          sources: new Set([source]),
+          preUrl: known.url,
+          preDomHash: known.domHash
+        };
+        this.pushControlTimelineEntry({
+          actionType: "pause_start",
+          phase: "start",
+          elapsedMs: 0,
+          postUrl: known.url,
+          postDomHash: known.domHash,
+          sources: [source],
+          urlChanged: false,
+          domChanged: false
+        });
+      } else if (this.activeIntervention) {
+        this.activeIntervention.sources.add(source);
       }
       this.executionPauseSources.add(source);
     }
@@ -163,11 +193,55 @@ export class AgentSession {
     return this.getExecutionControlState();
   }
 
-  resumeExecution(source = "api"): { paused: boolean; pausedMs: number; sources: string[] } {
+  async resumeExecution(source = "api"): Promise<{ paused: boolean; pausedMs: number; sources: string[] }> {
     if (this.executionPauseSources.delete(source) && this.executionPauseSources.size === 0) {
       const startedAt = this.executionPauseStartedAt ?? Date.now();
-      this.executionPausedMsTotal += Math.max(0, Date.now() - startedAt);
+      const finishedAt = Date.now();
+      const elapsedMs = Math.max(0, finishedAt - startedAt);
+      this.executionPausedMsTotal += elapsedMs;
       this.executionPauseStartedAt = undefined;
+
+      const postSnapshot = await this.captureCurrentSnapshot().catch(() => this.lastSnapshot);
+      if (postSnapshot) {
+        this.lastSnapshot = postSnapshot;
+      }
+
+      const intervention = this.activeIntervention;
+      const preUrl = intervention?.preUrl ?? this.lastSnapshot?.url ?? "";
+      const preDomHash = intervention?.preDomHash ?? this.lastSnapshot?.domHash ?? "";
+      const postUrl = postSnapshot?.url ?? this.lastSnapshot?.url ?? preUrl;
+      const postDomHash = postSnapshot?.domHash ?? this.lastSnapshot?.domHash ?? preDomHash;
+      const sources =
+        intervention && intervention.sources.size > 0
+          ? [...intervention.sources].sort((left, right) => left.localeCompare(right))
+          : [source];
+      const startedAtForJournal = intervention?.startedAt ?? startedAt;
+
+      const journalEntry: InterventionJournalEntry = {
+        startedAt: startedAtForJournal,
+        finishedAt,
+        elapsedMs,
+        sources,
+        preUrl,
+        postUrl,
+        preDomHash,
+        postDomHash,
+        urlChanged: preUrl !== postUrl,
+        domChanged: preDomHash !== postDomHash
+      };
+      this.interventionJournal.push(journalEntry);
+      this.pushControlTimelineEntry({
+        actionType: "pause_resume",
+        phase: "resume",
+        elapsedMs,
+        postUrl,
+        postDomHash,
+        sources,
+        urlChanged: journalEntry.urlChanged,
+        domChanged: journalEntry.domChanged
+      });
+      this.activeIntervention = null;
+
       const waiters = [...this.executionResumeWaiters];
       this.executionResumeWaiters.length = 0;
       for (const waiter of waiters) {
@@ -319,7 +393,7 @@ export class AgentSession {
     });
 
     this.timelineEntries.push({
-      index: this.actionCounter - 1,
+      index: this.timelineEntries.length,
       actionType: action.type,
       status: result.status,
       durationMs: result.durationMs,
@@ -358,6 +432,7 @@ export class AgentSession {
         requiredOrigins: [...this.requiredOrigins].sort((left, right) => left.localeCompare(right))
       },
       timeline: [...this.timelineEntries],
+      interventions: [...this.interventionJournal],
       records: this.traceRecords
     };
 
@@ -1120,7 +1195,72 @@ export class AgentSession {
         install();
       }
     });
+  }
 
+  private pushControlTimelineEntry(input: {
+    actionType: "pause_start" | "pause_resume";
+    phase: "start" | "resume";
+    elapsedMs: number;
+    postUrl: string;
+    postDomHash: string;
+    sources: string[];
+    urlChanged: boolean;
+    domChanged: boolean;
+  }): void {
+    this.timelineEntries.push({
+      index: this.timelineEntries.length,
+      actionType: input.actionType,
+      status: "ok",
+      durationMs: input.elapsedMs,
+      postUrl: input.postUrl,
+      postDomHash: input.postDomHash,
+      domDiffSummary: {
+        added: 0,
+        removed: 0,
+        changed: 0
+      },
+      eventCount: 0,
+      control: {
+        phase: input.phase,
+        elapsedMs: input.elapsedMs,
+        sources: [...input.sources].sort((left, right) => left.localeCompare(right)),
+        urlChanged: input.urlChanged,
+        domChanged: input.domChanged
+      }
+    });
+  }
+
+  private getKnownSnapshotState(): { url: string; domHash: string } {
+    if (this.lastSnapshot) {
+      return {
+        url: this.lastSnapshot.url,
+        domHash: this.lastSnapshot.domHash
+      };
+    }
+
+    if (this.page) {
+      return {
+        url: safePageUrl(this.page, ""),
+        domHash: ""
+      };
+    }
+
+    return {
+      url: "",
+      domHash: ""
+    };
+  }
+
+  private async captureCurrentSnapshot(): Promise<DomSnapshot | null> {
+    if (!this.page) {
+      return this.lastSnapshot;
+    }
+
+    try {
+      return await takeDomSnapshot(this.page);
+    } catch {
+      return this.lastSnapshot;
+    }
   }
 
   private async waitForExecutionResume(): Promise<void> {

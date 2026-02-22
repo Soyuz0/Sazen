@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 import { getTraceTimeline, loadSavedTrace } from "./trace.js";
-import type { VisualDiffEntry, VisualDiffReport } from "./types.js";
+import type { Action, TraceTimelineEntry, VisualDiffEntry, VisualDiffReport } from "./types.js";
 
 export interface ComparePngOptions {
   threshold?: number;
@@ -96,8 +96,8 @@ export async function compareTraceVisuals(
   const baselineTrace = await loadSavedTrace(baselineTracePath);
   const candidateTrace = await loadSavedTrace(candidateTracePath);
 
-  const baselineTimeline = getTraceTimeline(baselineTrace.trace);
-  const candidateTimeline = getTraceTimeline(candidateTrace.trace);
+  const baselineTimeline = getTraceTimeline(baselineTrace.trace).filter(isVisualComparableTimelineEntry);
+  const candidateTimeline = getTraceTimeline(candidateTrace.trace).filter(isVisualComparableTimelineEntry);
   const maxSteps = Math.min(effective.maxSteps, Math.max(baselineTimeline.length, candidateTimeline.length));
 
   const resultEntries: VisualDiffEntry[] = [];
@@ -111,7 +111,7 @@ export async function compareTraceVisuals(
   for (let index = 0; index < maxSteps; index += 1) {
     const baselineEntry = baselineTimeline[index];
     const candidateEntry = candidateTimeline[index];
-    const actionType = candidateEntry?.actionType ?? baselineEntry?.actionType ?? "snapshot";
+    const actionType: Action["type"] = candidateEntry?.actionType ?? baselineEntry?.actionType ?? "snapshot";
 
     const baselineArtifact = chooseArtifactPath(baselineEntry, effective.preferAnnotatedArtifacts);
     const candidateArtifact = chooseArtifactPath(candidateEntry, effective.preferAnnotatedArtifacts);
@@ -194,4 +194,10 @@ function chooseArtifactPath(
   }
 
   return entry.screenshotPath ?? entry.annotatedScreenshotPath;
+}
+
+function isVisualComparableTimelineEntry(
+  entry: TraceTimelineEntry
+): entry is TraceTimelineEntry & { actionType: Action["type"] } {
+  return entry.actionType !== "pause_start" && entry.actionType !== "pause_resume";
 }

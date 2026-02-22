@@ -325,7 +325,7 @@ export interface TraceEnvironment {
 
 export interface TraceTimelineEntry {
   index: number;
-  actionType: Action["type"];
+  actionType: Action["type"] | "pause_start" | "pause_resume";
   status: ActionStatus;
   durationMs: number;
   postUrl: string;
@@ -334,6 +334,26 @@ export interface TraceTimelineEntry {
   eventCount: number;
   screenshotPath?: string;
   annotatedScreenshotPath?: string;
+  control?: {
+    phase: "start" | "resume";
+    elapsedMs?: number;
+    sources: string[];
+    urlChanged?: boolean;
+    domChanged?: boolean;
+  };
+}
+
+export interface InterventionJournalEntry {
+  startedAt: number;
+  finishedAt: number;
+  elapsedMs: number;
+  sources: string[];
+  preUrl: string;
+  postUrl: string;
+  preDomHash: string;
+  postDomHash: string;
+  urlChanged: boolean;
+  domChanged: boolean;
 }
 
 export interface SavedTrace {
@@ -343,6 +363,7 @@ export interface SavedTrace {
   options: AgentSessionOptions;
   environment?: TraceEnvironment;
   timeline?: TraceTimelineEntry[];
+  interventions?: InterventionJournalEntry[];
   records: TraceRecord[];
 }
 

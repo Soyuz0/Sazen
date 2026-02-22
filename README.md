@@ -19,6 +19,12 @@ npm run dev -- run examples/sample-flow.json --headless --trace traces/sample-tr
 # stream live timeline rows while run executes
 npm run dev -- run examples/sample-flow.json --headless --live-timeline --timeline-stream reports/runtime-logs/live.jsonl
 
+# start a controllable run (from another shell use run-control)
+npm run dev -- run examples/sample-flow.json --headless --control-socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control state --socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control pause --socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control resume --socket reports/runtime-logs/run-control.sock
+
 # pause during a script step (timeout mode example inside script)
 # { "type": "pause", "mode": "timeout", "timeoutMs": 5000, "note": "manual review" }
 
@@ -92,6 +98,7 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 
 ### Execution commands
 - `run <script.json>`: execute action script.
+- `run-control <command>`: send `pause|resume|state` to a running script via control socket.
 - `act <json|@file>`: execute one or many actions.
 - `snapshot <url>`: print token-optimized snapshot JSON.
 
@@ -155,6 +162,13 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
   - `timeout`: resume after `timeoutMs`
   - `enter`: wait for Enter (or timeout fallback)
 - Result metadata includes `pauseSummary` with elapsed time and whether URL/DOM changed during pause.
+
+### Run-level control + provenance
+- `run --control-socket <path>` starts a local control socket for external pause/resume/state commands.
+- `run-control pause|resume|state --socket <path>` controls or inspects an active run from another terminal.
+- Trace output now includes:
+  - `timeline` provenance markers: `pause_start`, `pause_resume`
+  - `interventions` journal entries (pre/post URL + DOM hash and change flags)
 
 ### Browser overlay controls
 - By default, pages include a small top-right runtime panel with `Pause` and `Resume`.
@@ -257,6 +271,21 @@ npm run dev -- adapter-stdio
 
 3. Read line-delimited JSON responses (`ok`, `result`, `error`); responses may arrive out of order, so correlate by `id`.
 
+### Controlling a long local run
+1. Start run with control socket:
+
+```bash
+npm run dev -- run examples/sample-flow.json --control-socket reports/runtime-logs/run-control.sock
+```
+
+2. From another shell:
+
+```bash
+npm run dev -- run-control state --socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control pause --socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control resume --socket reports/runtime-logs/run-control.sock
+```
+
 ---
 
 ## Examples
@@ -287,9 +316,10 @@ Implemented now:
 - replay/flake/timeline/timeline-html/bundle/visual-diff
 - assertion DSL, consent helper, profiles, stability modes
 - annotated per-action screenshots
+- run-level pause/resume controls with trace intervention journaling and provenance markers
 
 Planned (tracked in `.plan`):
 - richer live timeline pane UI during execution (current live stream is row/JSONL based)
 - element-aware visual diff labels/semantic tags on diff outputs
-- richer run-level intervention journaling (adapter pause/resume control is implemented)
+- storage/cookie delta journaling and richer post-resume reconciliation hints
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

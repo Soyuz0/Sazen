@@ -208,7 +208,7 @@ export class AdapterRuntime {
 
   private async resumeSession(params: Record<string, unknown>): Promise<unknown> {
     const entry = this.requireSessionEntry(params.sessionId);
-    const state = entry.session.resumeExecution("adapter");
+    const state = await entry.session.resumeExecution("adapter");
 
     return {
       paused: state.paused,

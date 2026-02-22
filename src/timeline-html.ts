@@ -51,6 +51,13 @@ export function buildTimelineHtmlDocument(input: {
       const preview = artifactPath
         ? `<img loading="lazy" src="${escapeHtml(fileUrl(artifactPath))}" alt="screenshot" />`
         : "";
+      const controlSummary = entry.control
+        ? `<div class="control-note">${escapeHtml(
+            `phase=${entry.control.phase} elapsed=${entry.control.elapsedMs ?? 0}ms sources=${
+              entry.control.sources.join(",") || "none"
+            } urlChanged=${Boolean(entry.control.urlChanged)} domChanged=${Boolean(entry.control.domChanged)}`
+          )}</div>`
+        : "";
 
       return `
       <tr data-status="${escapeHtml(entry.status)}" data-action="${escapeHtml(entry.actionType)}">
@@ -60,7 +67,7 @@ export function buildTimelineHtmlDocument(input: {
         <td>${entry.durationMs}ms</td>
         <td>${entry.eventCount}</td>
         <td>${entry.domDiffSummary.added}/${entry.domDiffSummary.removed}/${entry.domDiffSummary.changed}</td>
-        <td title="${escapeHtml(entry.postUrl)}">${escapeHtml(truncate(entry.postUrl, 70))}</td>
+        <td title="${escapeHtml(entry.postUrl)}">${escapeHtml(truncate(entry.postUrl, 70))}${controlSummary}</td>
         <td>${screenshot}</td>
       </tr>
       <tr class="preview-row" data-preview-status="${escapeHtml(entry.status)}" data-preview-action="${escapeHtml(entry.actionType)}">
@@ -87,6 +94,7 @@ export function buildTimelineHtmlDocument(input: {
     th { background: #eef2ff; position: sticky; top: 0; }
     tr.preview-row td { background: #fafcff; }
     tr.preview-row img { max-width: 100%; border: 1px solid #dbe2ee; border-radius: 8px; }
+    .control-note { margin-top: 4px; color: #475569; font-size: 12px; }
   </style>
 </head>
 <body>

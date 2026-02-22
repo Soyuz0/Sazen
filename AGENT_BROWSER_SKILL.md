@@ -25,6 +25,15 @@ npm test
 npm run dev -- run examples/sample-flow.json --trace traces/sample-trace.json --live-timeline
 ```
 
+Optional long-run control socket:
+
+```bash
+npm run dev -- run examples/sample-flow.json --control-socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control state --socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control pause --socket reports/runtime-logs/run-control.sock
+npm run dev -- run-control resume --socket reports/runtime-logs/run-control.sock
+```
+
 3. Triage if needed:
 
 ```bash
@@ -46,6 +55,11 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 - A runtime overlay is injected into pages by default (Pause/Resume).
 - Overlay pause blocks subsequent automated actions until resumed.
 - Overlay UI is excluded from snapshot modeling/diffs so hashes remain meaningful.
+
+## Pause Provenance
+
+- Run-level pause/resume events are recorded as timeline markers (`pause_start`, `pause_resume`).
+- Saved traces include `interventions` journal entries with pre/post URL + DOM hash and change flags.
 
 ## Adapter Runtime (`adapter-stdio`)
 

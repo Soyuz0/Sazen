@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { appendFile, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createConnection, createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { createInterface } from "node:readline";
@@ -38,6 +39,7 @@ configureBundleCommand(program);
 configureTimelineHtmlCommand(program);
 configureVisualDiffCommand(program);
 configureAdapterStdioCommand(program);
+configureRunControlCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
@@ -144,6 +146,7 @@ function configureRunCommand(root: Command): void {
     .option("--logs", "Print captured events after each action", false)
     .option("--live-timeline", "Print timeline rows as actions complete", false)
     .option("--timeline-stream <path>", "Write live timeline JSONL stream to file")
+    .option("--control-socket <path>", "Enable run control socket at this path")
     .action(async (scriptPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(scriptPath);
       const raw = await readFile(absolutePath, "utf8");
@@ -160,12 +163,44 @@ function configureRunCommand(root: Command): void {
         await writeFile(streamPath, "", "utf8");
       }
 
+      const controlSocketPath =
+        typeof options.controlSocket === "string" && options.controlSocket.length > 0
+          ? resolve(options.controlSocket)
+          : undefined;
+
       await session.start();
+
+      let currentActionIndex = -1;
+      let completedActions = 0;
+      let runFinished = false;
+      let runControl: RunControlServer | undefined;
 
       let failedActions = 0;
       let printedTimelineHeader = false;
       try {
+        runControl = controlSocketPath
+          ? await startRunControlServer({
+              socketPath: controlSocketPath,
+              session,
+              getRunState: () => ({
+                currentActionIndex,
+                completedActions,
+                totalActions: script.actions.length,
+                runFinished,
+                currentActionType:
+                  currentActionIndex >= 0 && currentActionIndex < script.actions.length
+                    ? script.actions[currentActionIndex].type
+                    : undefined
+              })
+            })
+          : undefined;
+
+        if (runControl) {
+          console.log(`Run control socket: ${runControl.socketPath}`);
+        }
+
         for (const [index, action] of script.actions.entries()) {
+          currentActionIndex = index;
           console.log(`\nAction ${index + 1}/${script.actions.length}: ${action.type}`);
           if (action.type === "pause" && (action.mode ?? "enter") === "enter") {
             console.log("Pause action active: press Enter to resume (or wait for timeout).");
@@ -201,7 +236,11 @@ function configureRunCommand(root: Command): void {
           if (result.status !== "ok") {
             failedActions += 1;
           }
+
+          completedActions = index + 1;
         }
+
+        runFinished = true;
 
         if (typeof options.trace === "string" && options.trace.length > 0) {
           const tracePath = await session.saveTrace(options.trace);
@@ -217,6 +256,10 @@ function configureRunCommand(root: Command): void {
           process.exitCode = 2;
         }
       } finally {
+        runFinished = true;
+        if (runControl) {
+          await runControl.close();
+        }
         await session.close();
       }
     });
@@ -538,6 +581,12 @@ function configureTimelineCommand(root: Command): void {
             console.log(`    ${label}: ${artifactPath}`);
           }
         }
+
+        if (entry.control) {
+          console.log(
+            `    control: phase=${entry.control.phase} elapsed=${entry.control.elapsedMs ?? 0}ms sources=${entry.control.sources.join(",") || "none"} urlChanged=${Boolean(entry.control.urlChanged)} domChanged=${Boolean(entry.control.domChanged)}`
+          );
+        }
       }
     });
 }
@@ -588,6 +637,7 @@ function configureBundleCommand(root: Command): void {
         copiedTracePath: traceCopyPath,
         totalActions: timeline.length,
         failedActions: timeline.filter((entry) => entry.status !== "ok").length,
+        interventions: trace.interventions ?? [],
         screenshots,
         annotatedScreenshots,
         copiedScreenshots,
@@ -602,6 +652,7 @@ function configureBundleCommand(root: Command): void {
       console.log(`- Manifest: ${manifestPath}`);
       console.log(`- Screenshot refs: ${screenshots.length}`);
       console.log(`- Annotated refs: ${annotatedScreenshots.length}`);
+      console.log(`- Interventions: ${(trace.interventions ?? []).length}`);
       if (Boolean(options.copyArtifacts)) {
         console.log(`- Screenshots copied: ${copiedScreenshots.length}`);
       }
@@ -825,6 +876,300 @@ function configureAdapterStdioCommand(root: Command): void {
       await Promise.allSettled([...pending]);
       await runtime.shutdown();
     });
+}
+
+function configureRunControlCommand(root: Command): void {
+  root
+    .command("run-control")
+    .description("Send pause/resume/state command to a run control socket")
+    .argument("<command>", "pause|resume|state")
+    .requiredOption("--socket <path>", "Control socket path created by run")
+    .option("--timeout <ms>", "Request timeout in ms", "5000")
+    .option("--json", "Print raw JSON response", false)
+    .action(async (command: string, options: Record<string, string | boolean>) => {
+      const parsed = parseRunControlCommand(command);
+      const socketPath = resolve(String(options.socket));
+      const timeoutMs = Math.max(100, toNumber(options.timeout, 5_000));
+      const response = await sendRunControlCommand(socketPath, parsed, timeoutMs);
+
+      if (Boolean(options.json)) {
+        console.log(JSON.stringify(response, null, 2));
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(response.error?.message ?? "Run control command failed");
+      }
+
+      console.log(`Run control: ${response.command}`);
+      if (response.state) {
+        console.log(
+          `- paused=${response.state.paused} pausedMs=${Math.floor(response.state.pausedMs)} sources=${response.state.sources.join(",") || "none"}`
+        );
+      }
+      if (response.run) {
+        const currentAction =
+          typeof response.run.currentActionType === "string"
+            ? response.run.currentActionType
+            : response.run.currentActionIndex >= 0
+              ? `index:${response.run.currentActionIndex}`
+              : "none";
+        console.log(
+          `- run finished=${response.run.runFinished} current=${currentAction} completed=${response.run.completedActions}/${response.run.totalActions}`
+        );
+      }
+    });
+}
+
+interface RunControlState {
+  paused: boolean;
+  pausedMs: number;
+  sources: string[];
+}
+
+interface RunControlRunState {
+  currentActionIndex: number;
+  completedActions: number;
+  totalActions: number;
+  runFinished: boolean;
+  currentActionType?: string;
+}
+
+interface RunControlResponse {
+  ok: boolean;
+  command: "pause" | "resume" | "state";
+  state?: RunControlState;
+  run?: RunControlRunState;
+  error?: {
+    message: string;
+  };
+}
+
+interface RunControlServer {
+  socketPath: string;
+  close: () => Promise<void>;
+}
+
+async function startRunControlServer(input: {
+  socketPath: string;
+  session: AgentSession;
+  getRunState: () => RunControlRunState;
+}): Promise<RunControlServer> {
+  await mkdir(dirname(input.socketPath), { recursive: true });
+  await rm(input.socketPath, { force: true }).catch(() => undefined);
+
+  const server = createServer((socket) => {
+    socket.setEncoding("utf8");
+    let buffer = "";
+    let handled = false;
+
+    const writeResponse = (response: RunControlResponse) => {
+      socket.end(`${JSON.stringify(response)}\n`);
+    };
+
+    socket.on("data", (chunk) => {
+      if (handled) {
+        return;
+      }
+
+      buffer += chunk;
+      const newlineIndex = buffer.indexOf("\n");
+      if (newlineIndex === -1) {
+        return;
+      }
+
+      handled = true;
+      const line = buffer.slice(0, newlineIndex).trim();
+      if (!line) {
+        writeResponse({
+          ok: false,
+          command: "state",
+          error: {
+            message: "Empty run control request"
+          }
+        });
+        return;
+      }
+
+      let payload: { command?: unknown };
+      try {
+        payload = JSON.parse(line) as { command?: unknown };
+      } catch (error) {
+        writeResponse({
+          ok: false,
+          command: "state",
+          error: {
+            message: `Invalid JSON request: ${error instanceof Error ? error.message : String(error)}`
+          }
+        });
+        return;
+      }
+
+      handleRunControlCommand(input.session, input.getRunState, payload.command)
+        .then((response) => {
+          writeResponse(response);
+        })
+        .catch((error) => {
+          writeResponse({
+            ok: false,
+            command: "state",
+            error: {
+              message: error instanceof Error ? error.message : String(error)
+            }
+          });
+        });
+    });
+  });
+
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    const onError = (error: Error) => {
+      server.off("listening", onListening);
+      rejectPromise(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolvePromise();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(input.socketPath);
+  });
+
+  let closed = false;
+  const close = async () => {
+    if (closed) {
+      return;
+    }
+    closed = true;
+    await new Promise<void>((resolvePromise) => {
+      server.close(() => {
+        resolvePromise();
+      });
+    });
+    await rm(input.socketPath, { force: true }).catch(() => undefined);
+  };
+
+  return {
+    socketPath: input.socketPath,
+    close
+  };
+}
+
+async function handleRunControlCommand(
+  session: AgentSession,
+  getRunState: () => RunControlRunState,
+  rawCommand: unknown
+): Promise<RunControlResponse> {
+  const command = parseRunControlCommand(typeof rawCommand === "string" ? rawCommand : "state");
+
+  if (command === "pause") {
+    const state = session.pauseExecution("cli");
+    return {
+      ok: true,
+      command,
+      state,
+      run: getRunState()
+    };
+  }
+
+  if (command === "resume") {
+    const state = await session.resumeExecution("cli");
+    return {
+      ok: true,
+      command,
+      state,
+      run: getRunState()
+    };
+  }
+
+  return {
+    ok: true,
+    command,
+    state: session.getExecutionControlState(),
+    run: getRunState()
+  };
+}
+
+async function sendRunControlCommand(
+  socketPath: string,
+  command: "pause" | "resume" | "state",
+  timeoutMs: number
+): Promise<RunControlResponse> {
+  return new Promise<RunControlResponse>((resolvePromise, rejectPromise) => {
+    const socket = createConnection(socketPath);
+    socket.setEncoding("utf8");
+    let buffer = "";
+    let settled = false;
+
+    const finishWithError = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      rejectPromise(error);
+    };
+
+    const finishWithResponse = (response: RunControlResponse) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      socket.end();
+      resolvePromise(response);
+    };
+
+    const timer = setTimeout(() => {
+      finishWithError(new Error(`Run control request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    socket.on("connect", () => {
+      socket.write(`${JSON.stringify({ command })}\n`);
+    });
+
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+      const newlineIndex = buffer.indexOf("\n");
+      if (newlineIndex === -1) {
+        return;
+      }
+
+      const line = buffer.slice(0, newlineIndex).trim();
+      if (!line) {
+        finishWithError(new Error("Run control response was empty"));
+        return;
+      }
+
+      try {
+        const response = JSON.parse(line) as RunControlResponse;
+        finishWithResponse(response);
+      } catch (error) {
+        finishWithError(
+          new Error(`Invalid run control response JSON: ${error instanceof Error ? error.message : String(error)}`)
+        );
+      }
+    });
+
+    socket.on("error", (error) => {
+      finishWithError(error instanceof Error ? error : new Error(String(error)));
+    });
+
+    socket.on("end", () => {
+      if (!settled) {
+        finishWithError(new Error("Run control socket closed before returning a response"));
+      }
+    });
+  });
+}
+
+function parseRunControlCommand(raw: string): "pause" | "resume" | "state" {
+  if (raw === "pause" || raw === "resume" || raw === "state") {
+    return raw;
+  }
+
+  throw new Error(`Unsupported run control command '${raw}'. Use pause, resume, or state.`);
 }
 
 function toSessionOptions(options: Record<string, string | boolean>): AgentSessionOptions {

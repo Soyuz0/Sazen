@@ -66,4 +66,55 @@ describe("trace timeline", () => {
     expect(timeline[0].eventCount).toBe(5);
     expect(timeline[0].domDiffSummary.changed).toBe(0);
   });
+
+  it("keeps pause provenance marker entries", () => {
+    const trace: SavedTrace = {
+      version: 2,
+      createdAt: new Date().toISOString(),
+      sessionId: "timeline-control",
+      options: {},
+      timeline: [
+        {
+          index: 1,
+          actionType: "pause_resume",
+          status: "ok",
+          durationMs: 300,
+          postUrl: "https://example.com/dashboard",
+          postDomHash: "hash-b",
+          domDiffSummary: { added: 0, removed: 0, changed: 0 },
+          eventCount: 0,
+          control: {
+            phase: "resume",
+            elapsedMs: 300,
+            sources: ["cli"],
+            urlChanged: false,
+            domChanged: true
+          }
+        },
+        {
+          index: 0,
+          actionType: "pause_start",
+          status: "ok",
+          durationMs: 0,
+          postUrl: "https://example.com/dashboard",
+          postDomHash: "hash-a",
+          domDiffSummary: { added: 0, removed: 0, changed: 0 },
+          eventCount: 0,
+          control: {
+            phase: "start",
+            elapsedMs: 0,
+            sources: ["cli"],
+            urlChanged: false,
+            domChanged: false
+          }
+        }
+      ],
+      records: []
+    };
+
+    const timeline = getTraceTimeline(trace);
+    expect(timeline[0].actionType).toBe("pause_start");
+    expect(timeline[1].actionType).toBe("pause_resume");
+    expect(timeline[1].control?.phase).toBe("resume");
+  });
 });

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
-import { comparePngFiles } from "../src/visual.js";
+import { comparePngFiles, compareTraceVisuals } from "../src/visual.js";
 
 describe("visual diff", () => {
   it("detects identical images", async () => {
@@ -63,6 +63,113 @@ describe("visual diff", () => {
 
       const result = await comparePngFiles(baseline, candidate);
       expect(result.status).toBe("size_mismatch");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores pause provenance markers when comparing traces", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-browser-visual-trace-"));
+    const baselineTrace = join(dir, "baseline-trace.json");
+    const candidateTrace = join(dir, "candidate-trace.json");
+    const baselineShot = join(dir, "baseline.png");
+    const candidateShot = join(dir, "candidate.png");
+
+    try {
+      await writeSolidPng(baselineShot, 4, 4, [255, 255, 255, 255]);
+      await writeSolidPng(candidateShot, 4, 4, [255, 255, 255, 255]);
+
+      const baseTimeline = [
+        {
+          index: 0,
+          actionType: "pause_start",
+          status: "ok",
+          durationMs: 0,
+          postUrl: "https://example.com",
+          postDomHash: "h0",
+          domDiffSummary: { added: 0, removed: 0, changed: 0 },
+          eventCount: 0
+        },
+        {
+          index: 1,
+          actionType: "navigate",
+          status: "ok",
+          durationMs: 10,
+          postUrl: "https://example.com",
+          postDomHash: "h1",
+          domDiffSummary: { added: 0, removed: 0, changed: 0 },
+          eventCount: 0,
+          screenshotPath: baselineShot
+        }
+      ];
+
+      const candidateTimeline = [
+        {
+          index: 0,
+          actionType: "pause_resume",
+          status: "ok",
+          durationMs: 100,
+          postUrl: "https://example.com",
+          postDomHash: "h0b",
+          domDiffSummary: { added: 0, removed: 0, changed: 0 },
+          eventCount: 0
+        },
+        {
+          index: 1,
+          actionType: "navigate",
+          status: "ok",
+          durationMs: 12,
+          postUrl: "https://example.com",
+          postDomHash: "h1b",
+          domDiffSummary: { added: 0, removed: 0, changed: 0 },
+          eventCount: 0,
+          screenshotPath: candidateShot
+        }
+      ];
+
+      await writeFile(
+        baselineTrace,
+        JSON.stringify(
+          {
+            version: 2,
+            createdAt: new Date().toISOString(),
+            sessionId: "baseline",
+            options: {},
+            timeline: baseTimeline,
+            records: []
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      await writeFile(
+        candidateTrace,
+        JSON.stringify(
+          {
+            version: 2,
+            createdAt: new Date().toISOString(),
+            sessionId: "candidate",
+            options: {},
+            timeline: candidateTimeline,
+            records: []
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      const report = await compareTraceVisuals(baselineTrace, candidateTrace, {
+        outDir: join(dir, "diff"),
+        writeDiffImages: false
+      });
+
+      expect(report.compared).toBe(1);
+      expect(report.missing).toBe(0);
+      expect(report.entries).toHaveLength(1);
+      expect(report.entries[0].actionType).toBe("navigate");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

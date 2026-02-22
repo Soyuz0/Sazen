@@ -83,6 +83,9 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented pause action (`pause`) with timeout/enter modes and intervention summary metadata.
 - Implemented adapter runtime run controls: `pauseSession` / `resumeSession` / `getSessionState` with serialized session operations.
 - Implemented in-browser runtime overlay controls (Pause/Resume) wired to session execution state.
+- Implemented run-control socket surface for long `run` sessions (`run --control-socket`, `run-control pause|resume|state`).
+- Implemented pause intervention journal persistence in traces (`interventions`) with URL/DOM change metadata.
+- Implemented timeline provenance markers for run-level pause windows (`pause_start`, `pause_resume`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -124,6 +127,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added annotated screenshot artifacts in action results and timeline entries.
 - Added pause action coverage in integration tests and action result metadata.
 - Added overlay-node exclusion in snapshot capture to keep DOM hashes stable while runtime controls are visible.
+- Added integration coverage for run-level pause intervention journaling and trace provenance markers.
+- Updated visual diff comparison to ignore pause provenance timeline markers for stable action-to-action alignment.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -133,6 +138,37 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - CLI gives clear, real-time debugging output.
 
 ## Continuous Roadmap Additions
+
+## Base Plan Milestones (M1-M3)
+
+### M1 - Run Control Surface (Done)
+- Deliverables:
+  - CLI `run` exposes control socket (`--control-socket`).
+  - New `run-control` command supports `pause`, `resume`, and `state` from a separate process.
+  - Control state returns pause sources, elapsed pause time, and run progress metadata.
+- Validation:
+  - `npm run build`
+  - `npm test`
+  - Manual: run script + send `run-control state/pause/resume` against socket.
+
+### M2 - Pause Provenance + Intervention Journal (Done)
+- Deliverables:
+  - Trace persists `interventions` with `pre/post` URL and DOM hash.
+  - Timeline includes provenance marker rows: `pause_start` and `pause_resume`.
+  - Timeline renderers expose control metadata for auditability.
+- Validation:
+  - Unit: trace timeline coverage with control markers.
+  - Integration: session pause/resume records intervention entry in saved trace.
+
+### M3 - Tooling Compatibility + Baseline Safety (Done)
+- Deliverables:
+  - Visual diff engine ignores control-marker rows so screenshot step alignment remains stable.
+  - Bundle manifest includes intervention journal entries.
+  - Overlay controls remain excluded from DOM snapshots/diff hashes.
+- Validation:
+  - `npm run build`
+  - `npm test`
+  - Existing replay/visual/timeline suites stay green.
 
 ### Near-Term (v0.x)
 - **Resilient selector healing:** rank fallback locators so small DOM changes do not break actions.
@@ -173,10 +209,10 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **OpenAI Codex integration adapter:** lightweight local service exposing action/replay/timeline endpoints with deterministic schema for Codex tool use.
 - **Unified SDK contract:** one shared TypeScript/JSON schema for all three integrations to avoid per-agent drift.
 
-## Pause/Resume Runtime (Planned)
-- **Intervention journal:** richer capture of what changed during pause (URL, major DOM diffs, storage deltas where available).
-- **Run provenance markers:** timeline entries indicating pause start/end and subsequent agent reconciliation steps.
-- **CLI-exposed run control surface:** direct pause/resume controls for long local `run` executions, aligned with adapter semantics.
+## Pause/Resume Runtime (Post-Base Follow-Ups)
+- **Storage/cookie delta journaling:** extend intervention journal to include bounded storage/cookie diffs when allowed.
+- **Reconciliation hints:** attach suggested next actions after resume when URL/DOM drift is detected.
+- **MCP parity wiring:** mirror run-control semantics over future MCP transport.
 
 ## Feature Gaps Found During Dogfooding
 - **Consent/cookie strategy hooks:** extend generic accept/reject logic with site-specific adapters and region-aware variants.
