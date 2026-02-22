@@ -155,6 +155,10 @@ function configureRunCommand(root: Command): void {
       "--max-interventions-retained <n>",
       "Retain at most this many intervention journal entries"
     )
+    .option(
+      "--intervention-retention-mode <mode>",
+      "Intervention retention mode: count|severity"
+    )
     .action(async (scriptPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(scriptPath);
       const raw = await readFile(absolutePath, "utf8");
@@ -329,6 +333,10 @@ function configureLoopCommand(root: Command): void {
     .option(
       "--max-interventions-retained <n>",
       "Retain at most this many intervention journal entries"
+    )
+    .option(
+      "--intervention-retention-mode <mode>",
+      "Intervention retention mode: count|severity"
     )
     .action(async (loopPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(loopPath);
@@ -1095,7 +1103,12 @@ function configureRunControlCommand(root: Command): void {
           typeof response.interventionJournal.maxRetained === "number"
             ? String(response.interventionJournal.maxRetained)
             : "unbounded";
-        console.log(`- interventionJournal retained=${response.interventionJournal.retained} max=${max}`);
+        console.log(
+          `- interventionJournal retained=${response.interventionJournal.retained} high=${response.interventionJournal.highImpactRetained} low=${response.interventionJournal.lowImpactRetained} mode=${response.interventionJournal.mode} max=${max}`
+        );
+        console.log(
+          `- interventionJournal trimmed=${response.interventionJournal.trimmed} (high=${response.interventionJournal.trimmedHighImpact}, low=${response.interventionJournal.trimmedLowImpact})`
+        );
       }
     });
 }
@@ -1121,7 +1134,13 @@ interface RunControlResponse {
   run?: RunControlRunState;
   interventionJournal?: {
     retained: number;
+    highImpactRetained: number;
+    lowImpactRetained: number;
     maxRetained?: number;
+    mode: "count" | "severity";
+    trimmed: number;
+    trimmedHighImpact: number;
+    trimmedLowImpact: number;
   };
   latestIntervention?: {
     elapsedMs: number;
@@ -1406,6 +1425,7 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
   const screenshotMode = parseScreenshotMode(options.screenshotMode);
   const redactionPack = parseRedactionPack(options.redactionPack);
   const maxInterventionsRetained = toOptionalNumber(options.maxInterventionsRetained);
+  const interventionRetentionMode = parseInterventionRetentionMode(options.interventionRetentionMode);
 
   const result: AgentSessionOptions = {
     viewportWidth: viewport?.width,
@@ -1430,6 +1450,10 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
 
   if (typeof maxInterventionsRetained === "number" && maxInterventionsRetained >= 0) {
     result.maxInterventionsRetained = Math.floor(maxInterventionsRetained);
+  }
+
+  if (interventionRetentionMode) {
+    result.interventionRetentionMode = interventionRetentionMode;
   }
 
   if (isFlagPresent("--no-annotate-screenshots")) {
@@ -1513,6 +1537,20 @@ function parseRedactionPack(
   }
 
   throw new Error(`Invalid redaction pack '${raw}'. Use default, strict, or off.`);
+}
+
+function parseInterventionRetentionMode(
+  raw: string | boolean | undefined
+): AgentSessionOptions["interventionRetentionMode"] {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  if (raw === "count" || raw === "severity") {
+    return raw;
+  }
+
+  throw new Error(`Invalid intervention retention mode '${raw}'. Use count or severity.`);
 }
 
 async function parseActionInput(input: string): Promise<Action | Action[]> {

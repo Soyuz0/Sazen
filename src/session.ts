@@ -125,6 +125,9 @@ export class AgentSession {
   private activeIntervention: ActiveInterventionWindow | null = null;
   private lastKnownStorageSnapshot: SessionStorageSnapshot | null = null;
   private readonly executionResumeWaiters: Array<() => void> = [];
+  private interventionsTrimmedTotal = 0;
+  private interventionsTrimmedLow = 0;
+  private interventionsTrimmedHigh = 0;
   private closingPromise: Promise<void> | null = null;
 
   constructor(private readonly options: AgentSessionOptions = {}) {}
@@ -223,6 +226,11 @@ export class AgentSession {
         domChanged: preDomHash !== postDomHash,
         storageDelta
       });
+      const severity = classifyInterventionSeverity({
+        urlChanged: preUrl !== postUrl,
+        domChanged: preDomHash !== postDomHash,
+        storageDelta
+      });
 
       const journalEntry: InterventionJournalEntry = {
         startedAt: startedAtForJournal,
@@ -235,6 +243,7 @@ export class AgentSession {
         postDomHash,
         urlChanged: preUrl !== postUrl,
         domChanged: preDomHash !== postDomHash,
+        severity,
         storageDelta,
         reconciliationHints
       };
@@ -1541,14 +1550,45 @@ export class AgentSession {
       return;
     }
 
+    const mode = this.resolveInterventionRetentionMode();
+
     if (limit <= 0) {
-      this.interventionJournal.length = 0;
+      while (this.interventionJournal.length > 0) {
+        this.trimInterventionAt(0);
+      }
       return;
     }
 
-    if (this.interventionJournal.length > limit) {
-      this.interventionJournal.splice(0, this.interventionJournal.length - limit);
+    while (this.interventionJournal.length > limit) {
+      if (mode === "severity") {
+        const lowImpactIndex = this.interventionJournal.findIndex((entry) => entry.severity === "low");
+        if (lowImpactIndex >= 0) {
+          this.trimInterventionAt(lowImpactIndex);
+          continue;
+        }
+      }
+
+      this.trimInterventionAt(0);
     }
+  }
+
+  private trimInterventionAt(index: number): void {
+    if (index < 0 || index >= this.interventionJournal.length) {
+      return;
+    }
+
+    const [removed] = this.interventionJournal.splice(index, 1);
+    if (!removed) {
+      return;
+    }
+
+    this.interventionsTrimmedTotal += 1;
+    if (removed.severity === "high") {
+      this.interventionsTrimmedHigh += 1;
+      return;
+    }
+
+    this.interventionsTrimmedLow += 1;
   }
 
   private resolveInterventionRetentionLimit(): number | undefined {
@@ -1560,6 +1600,10 @@ export class AgentSession {
     return Math.max(0, Math.floor(raw));
   }
 
+  private resolveInterventionRetentionMode(): "count" | "severity" {
+    return this.options.interventionRetentionMode ?? "count";
+  }
+
   getLatestIntervention(): InterventionJournalEntry | undefined {
     if (this.interventionJournal.length === 0) {
       return undefined;
@@ -1567,10 +1611,28 @@ export class AgentSession {
     return this.interventionJournal[this.interventionJournal.length - 1];
   }
 
-  getInterventionJournalState(): { retained: number; maxRetained?: number } {
+  getInterventionJournalState(): {
+    retained: number;
+    highImpactRetained: number;
+    lowImpactRetained: number;
+    maxRetained?: number;
+    mode: "count" | "severity";
+    trimmed: number;
+    trimmedHighImpact: number;
+    trimmedLowImpact: number;
+  } {
+    const highImpactRetained = this.interventionJournal.filter((entry) => entry.severity === "high").length;
+    const lowImpactRetained = this.interventionJournal.length - highImpactRetained;
+
     return {
       retained: this.interventionJournal.length,
-      maxRetained: this.resolveInterventionRetentionLimit()
+      highImpactRetained,
+      lowImpactRetained,
+      maxRetained: this.resolveInterventionRetentionLimit(),
+      mode: this.resolveInterventionRetentionMode(),
+      trimmed: this.interventionsTrimmedTotal,
+      trimmedHighImpact: this.interventionsTrimmedHigh,
+      trimmedLowImpact: this.interventionsTrimmedLow
     };
   }
 
@@ -2106,6 +2168,35 @@ function buildReconciliationHints(input: {
   }
 
   return hints;
+}
+
+function classifyInterventionSeverity(input: {
+  urlChanged: boolean;
+  domChanged: boolean;
+  storageDelta?: InterventionJournalEntry["storageDelta"];
+}): InterventionJournalEntry["severity"] {
+  if (input.urlChanged || input.domChanged || hasStorageDrift(input.storageDelta)) {
+    return "high";
+  }
+
+  return "low";
+}
+
+function hasStorageDrift(storageDelta: InterventionJournalEntry["storageDelta"] | undefined): boolean {
+  if (!storageDelta) {
+    return false;
+  }
+
+  const cookieDrift =
+    storageDelta.cookies.added.length +
+    storageDelta.cookies.removed.length +
+    storageDelta.cookies.changed.length;
+  const localStorageDrift =
+    storageDelta.localStorage.added.length +
+    storageDelta.localStorage.removed.length +
+    storageDelta.localStorage.changed.length;
+
+  return cookieDrift + localStorageDrift > 0;
 }
 
 async function waitForEnterOrTimeout(timeoutMs: number): Promise<void> {

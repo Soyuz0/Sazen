@@ -77,6 +77,7 @@ Use timeline HTML presets and diff-only focus mode for long traces when narrowin
 - Run-level pause/resume events are recorded as timeline markers (`pause_start`, `pause_resume`).
 - Saved traces include `interventions` journal entries with pre/post URL + DOM hash, storage deltas, and reconciliation hints.
 - Use `maxInterventionsRetained` (or CLI `--max-interventions-retained`) when long sessions should cap retained intervention history.
+- Use `interventionRetentionMode: "severity"` (or CLI `--intervention-retention-mode severity`) to preserve high-impact interventions when trimming.
 
 ## Consent Strategy Hooks
 

@@ -650,6 +650,63 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("prefers retaining high-impact interventions in severity retention mode", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-severity-"));
+    const tracePath = join(tempDir, "trace.json");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir,
+      maxInterventionsRetained: 1,
+      interventionRetentionMode: "severity"
+    });
+
+    try {
+      await session.start();
+      await session.perform({ type: "navigate", url: fixture.baseUrl });
+
+      session.pauseExecution("high-impact");
+      const internalPage = (session as unknown as { page?: { evaluate: (cb: () => void) => Promise<void> } }).page;
+      expect(internalPage).toBeDefined();
+      await internalPage?.evaluate(() => {
+        window.location.hash = `severity-${Date.now()}`;
+      });
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 60);
+      });
+      await session.resumeExecution("high-impact");
+
+      session.pauseExecution("low-impact");
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 60);
+      });
+      await session.resumeExecution("low-impact");
+
+      const journalState = session.getInterventionJournalState();
+      expect(journalState.retained).toBe(1);
+      expect(journalState.mode).toBe("severity");
+      expect(journalState.highImpactRetained).toBe(1);
+      expect(journalState.lowImpactRetained).toBe(0);
+      expect(journalState.trimmed).toBe(1);
+      expect(journalState.trimmedLowImpact).toBe(1);
+
+      const latest = session.getLatestIntervention();
+      expect(latest?.severity).toBe("high");
+      expect(latest?.sources).toContain("high-impact");
+
+      await session.saveTrace(tracePath);
+      const raw = await readFile(tracePath, "utf8");
+      const trace = JSON.parse(raw) as SavedTrace;
+      expect((trace.interventions ?? []).length).toBe(1);
+      expect((trace.interventions ?? [])[0].severity).toBe("high");
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("closes sessions idempotently across repeated calls", async () => {
     const session = new AgentSession({
       headed: false,

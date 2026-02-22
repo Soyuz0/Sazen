@@ -382,6 +382,7 @@ export interface InterventionJournalEntry {
   postDomHash: string;
   urlChanged: boolean;
   domChanged: boolean;
+  severity: "low" | "high";
   storageDelta?: {
     cookies: {
       added: string[];
@@ -436,6 +437,7 @@ export interface AgentSessionOptions {
   contextAttachments?: boolean;
   contextAttachmentsDir?: string;
   maxInterventionsRetained?: number;
+  interventionRetentionMode?: "count" | "severity";
   storageStatePath?: string;
   logRedactionPatterns?: RegExp[];
   logNoiseFiltering?: boolean;

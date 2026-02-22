@@ -13,7 +13,8 @@ describe("contracts", () => {
         redactionPack: "strict",
         viewportWidth: 1280,
         viewportHeight: 800,
-        maxInterventionsRetained: 3
+        maxInterventionsRetained: 3,
+        interventionRetentionMode: "severity"
       },
       actions: [
         {
@@ -37,6 +38,7 @@ describe("contracts", () => {
     expect(parsed.settings?.annotateScreenshots).toBe(false);
     expect(parsed.settings?.redactionPack).toBe("strict");
     expect(parsed.settings?.maxInterventionsRetained).toBe(3);
+    expect(parsed.settings?.interventionRetentionMode).toBe("severity");
   });
 
   it("rejects invalid click action with no target", () => {

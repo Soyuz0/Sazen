@@ -186,7 +186,8 @@ describe("adapter runtime", () => {
             headed: false,
             deterministic: true,
             captureScreenshots: false,
-            maxInterventionsRetained: 1
+            maxInterventionsRetained: 1,
+            interventionRetentionMode: "severity"
           }
         }
       });
@@ -232,11 +233,17 @@ describe("adapter runtime", () => {
       const payload = state.result as {
         interventionJournal?: {
           retained?: number;
+          highImpactRetained?: number;
+          lowImpactRetained?: number;
           maxRetained?: number;
+          mode?: string;
         };
       };
       expect(payload.interventionJournal?.retained).toBe(1);
       expect(payload.interventionJournal?.maxRetained).toBe(1);
+      expect(payload.interventionJournal?.mode).toBe("severity");
+      expect(payload.interventionJournal?.highImpactRetained).toBeGreaterThanOrEqual(0);
+      expect(payload.interventionJournal?.lowImpactRetained).toBeGreaterThanOrEqual(0);
     } finally {
       await runtime.shutdown();
     }

@@ -98,6 +98,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented live timeline TUI mode for `run` (`--live-timeline --live-timeline-mode tui`) with auto-refresh rows and recent artifact/error panes.
 - Implemented timeline HTML filter presets and diff-only focus mode for long traces.
 - Implemented configurable intervention journal retention policy (`maxInterventionsRetained` / `--max-interventions-retained`).
+- Implemented severity-based intervention retention mode (`interventionRetentionMode: severity`) to preserve high-impact interventions when trimming.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -151,6 +152,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added unit coverage for live timeline TUI frame rendering and action-result row mapping.
 - Added unit coverage for timeline HTML preset/diff-only control rendering.
 - Added integration coverage for intervention retention policy in session and adapter state flows.
+- Added integration coverage for severity-based retention preference (high-impact interventions retained over low-impact entries).
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -239,7 +241,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Completed:** reconciliation hints attached when URL/DOM/storage drift occurs during pause.
 - **Completed:** MCP-parity alias methods (`session.pause|resume|state`) in adapter transport.
 - **Completed:** optional server-side policy for maximum retained intervention journal history.
-- **Next follow-up:** optional severity-based retention tiers (for example keep all URL/DOM-changing interventions while trimming low-impact entries).
+- **Completed:** optional severity-based retention tiers (high-impact interventions are retained before low-impact entries under cap).
+- **Next follow-up:** optional per-source retention quotas (for example reserve slots for `overlay` and `cli` interventions during long assisted runs).
 
 ## Feature Gaps Found During Dogfooding
 - **Resolved:** consent/cookie strategy hooks via region-aware + site/CMP selector layering.
