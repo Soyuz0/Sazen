@@ -81,7 +81,7 @@ function configureOpenCommand(root: Command): void {
           const manifestPath = await session.saveSession(options.save);
           console.log(`Saved session -> ${manifestPath}`);
         }
-        await session.close();
+        await safeCloseSession(session);
       }
     });
 }
@@ -122,7 +122,7 @@ function configureInspectCommand(root: Command): void {
           );
         }
       } finally {
-        await session.close();
+        await safeCloseSession(session);
       }
     });
 }
@@ -260,7 +260,7 @@ function configureRunCommand(root: Command): void {
         if (runControl) {
           await runControl.close();
         }
-        await session.close();
+        await safeCloseSession(session);
       }
     });
 }
@@ -299,7 +299,7 @@ function configureActionCommand(root: Command): void {
           printActionResult(result, Boolean(options.logs));
         }
       } finally {
-        await session.close();
+        await safeCloseSession(session);
       }
     });
 }
@@ -327,7 +327,7 @@ function configureSnapshotCommand(root: Command): void {
         const snapshot = await session.snapshot();
         console.log(JSON.stringify(tokenOptimizedSnapshot(snapshot), null, 2));
       } finally {
-        await session.close();
+        await safeCloseSession(session);
       }
     });
 }
@@ -361,7 +361,7 @@ function configureDescribeCommand(root: Command): void {
         description.screenshotPath = navigateResult.screenshotPath;
         console.log(JSON.stringify(description, null, 2));
       } finally {
-        await session.close();
+        await safeCloseSession(session);
       }
     });
 }
@@ -802,7 +802,7 @@ function configureLoadCommand(root: Command): void {
         await waitForInterrupt();
       } finally {
         unsubscribe();
-        await session.close();
+        await safeCloseSession(session);
       }
     });
 }
@@ -818,23 +818,42 @@ function configureAdapterStdioCommand(root: Command): void {
         crlfDelay: Infinity
       });
       const pending = new Set<Promise<void>>();
+      let shutdownPromise: Promise<void> | null = null;
 
       const writeResponse = (payload: unknown) => {
         process.stdout.write(`${JSON.stringify(payload)}\n`);
       };
 
-      const onExit = async () => {
-        rl.close();
-        await Promise.allSettled([...pending]);
-        await runtime.shutdown();
+      const shutdownAdapter = async () => {
+        if (shutdownPromise) {
+          return shutdownPromise;
+        }
+
+        shutdownPromise = (async () => {
+          process.off("SIGINT", onSigInt);
+          process.off("SIGTERM", onSigTerm);
+
+          rl.close();
+          await Promise.allSettled([...pending]);
+          await runtime.shutdown().catch((error) => {
+            if (!isBenignShutdownError(error)) {
+              throw error;
+            }
+          });
+        })();
+
+        return shutdownPromise;
       };
 
-      process.once("SIGINT", () => {
-        void onExit();
-      });
-      process.once("SIGTERM", () => {
-        void onExit();
-      });
+      const onSigInt = () => {
+        void shutdownAdapter();
+      };
+      const onSigTerm = () => {
+        void shutdownAdapter();
+      };
+
+      process.on("SIGINT", onSigInt);
+      process.on("SIGTERM", onSigTerm);
 
       for await (const line of rl) {
         const trimmed = line.trim();
@@ -876,8 +895,7 @@ function configureAdapterStdioCommand(root: Command): void {
         pending.add(task);
       }
 
-      await Promise.allSettled([...pending]);
-      await runtime.shutdown();
+      await shutdownAdapter();
     });
 }
 
@@ -1404,19 +1422,8 @@ function pad(input: string, width: number): string {
 }
 
 function waitForInterrupt(): Promise<void> {
-  return new Promise((resolvePromise) => {
-    const onSigInt = () => {
-      process.off("SIGTERM", onSigTerm);
-      resolvePromise();
-    };
-    const onSigTerm = () => {
-      process.off("SIGINT", onSigInt);
-      resolvePromise();
-    };
-
-    process.once("SIGINT", onSigInt);
-    process.once("SIGTERM", onSigTerm);
-  });
+  const waiter = createInterruptWaiter();
+  return waiter.promise;
 }
 
 async function waitForInterruptOrTimeout(timeoutMs: number | undefined): Promise<void> {
@@ -1425,24 +1432,80 @@ async function waitForInterruptOrTimeout(timeoutMs: number | undefined): Promise
     return;
   }
 
-  await Promise.race([
-    waitForInterrupt(),
-    new Promise<void>((resolvePromise) => {
-      setTimeout(resolvePromise, timeoutMs);
-    })
-  ]);
+  const waiter = createInterruptWaiter();
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      waiter.promise,
+      new Promise<void>((resolvePromise) => {
+        timer = setTimeout(resolvePromise, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    waiter.cancel();
+  }
 }
 
 async function safeCloseSession(session: AgentSession): Promise<void> {
   try {
     await session.close();
   } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-    if (message.includes("target page") || message.includes("target closed") || message.includes("closed")) {
+    if (isBenignShutdownError(error)) {
       return;
     }
     throw error;
   }
+}
+
+function createInterruptWaiter(): { promise: Promise<void>; cancel: () => void } {
+  let settled = false;
+
+  const cancel = () => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    process.off("SIGINT", onSigInt);
+    process.off("SIGTERM", onSigTerm);
+  };
+
+  const onSigInt = () => {
+    cancel();
+    resolvePromise?.();
+  };
+  const onSigTerm = () => {
+    cancel();
+    resolvePromise?.();
+  };
+
+  let resolvePromise: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+    process.on("SIGINT", onSigInt);
+    process.on("SIGTERM", onSigTerm);
+  });
+
+  return {
+    promise,
+    cancel
+  };
+}
+
+function isBenignShutdownError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes("target page") ||
+    message.includes("target closed") ||
+    message.includes("browser has been closed") ||
+    message.includes("context closed") ||
+    message.includes("already closed") ||
+    message.includes("channel closed") ||
+    message.includes("connection closed") ||
+    message.includes("closed")
+  );
 }
 
 function isFlagPresent(flag: string): boolean {

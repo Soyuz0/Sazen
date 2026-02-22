@@ -124,6 +124,7 @@ export class AgentSession {
   private activeIntervention: ActiveInterventionWindow | null = null;
   private lastKnownStorageSnapshot: SessionStorageSnapshot | null = null;
   private readonly executionResumeWaiters: Array<() => void> = [];
+  private closingPromise: Promise<void> | null = null;
 
   constructor(private readonly options: AgentSessionOptions = {}) {}
 
@@ -545,12 +546,41 @@ export class AgentSession {
   }
 
   async close(): Promise<void> {
-    await this.context?.close();
-    await this.browser?.close();
+    if (this.closingPromise) {
+      return this.closingPromise;
+    }
+
+    const context = this.context;
+    const browser = this.browser;
+
     this.context = null;
     this.browser = null;
     this.page = null;
     this.observer = null;
+
+    const closeTask = (async () => {
+      if (context) {
+        await context.close().catch((error) => {
+          if (!isBenignCloseError(error)) {
+            throw error;
+          }
+        });
+      }
+
+      if (browser) {
+        await browser.close().catch((error) => {
+          if (!isBenignCloseError(error)) {
+            throw error;
+          }
+        });
+      }
+    })();
+
+    this.closingPromise = closeTask.finally(() => {
+      this.closingPromise = null;
+    });
+
+    return this.closingPromise;
   }
 
   private async executeAction(
@@ -1517,6 +1547,18 @@ function safePageUrl(page: Page, fallback: string): string {
   } catch {
     return fallback;
   }
+}
+
+function isBenignCloseError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes("target closed") ||
+    message.includes("browser has been closed") ||
+    message.includes("context closed") ||
+    message.includes("already closed") ||
+    message.includes("channel closed") ||
+    message.includes("connection closed")
+  );
 }
 
 function dedupeLocatorCandidates(candidates: LocatorCandidate[]): LocatorCandidate[] {

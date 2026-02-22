@@ -464,4 +464,17 @@ describe("agent session integration", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it("closes sessions idempotently across repeated calls", async () => {
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false
+    });
+
+    await session.start();
+    await session.perform({ type: "navigate", url: fixture.baseUrl });
+
+    await Promise.all([session.close(), session.close(), session.close()]);
+  }, 120_000);
 });

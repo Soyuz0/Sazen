@@ -30,6 +30,7 @@ interface SessionEntry {
 export class AdapterRuntime {
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly operationLocks = new Map<string, Promise<void>>();
+  private shutdownPromise: Promise<void> | null = null;
 
   async handleRequest(request: AdapterRequest): Promise<AdapterResponse> {
     try {
@@ -51,10 +52,23 @@ export class AdapterRuntime {
   }
 
   async shutdown(): Promise<void> {
-    for (const entry of this.sessions.values()) {
-      await entry.session.close().catch(() => undefined);
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
     }
-    this.sessions.clear();
+
+    const task = (async () => {
+      for (const entry of this.sessions.values()) {
+        await entry.session.close().catch(() => undefined);
+      }
+      this.sessions.clear();
+      this.operationLocks.clear();
+    })();
+
+    this.shutdownPromise = task.finally(() => {
+      this.shutdownPromise = null;
+    });
+
+    return this.shutdownPromise;
   }
 
   private async execute(method: string, params: Record<string, unknown>): Promise<unknown> {

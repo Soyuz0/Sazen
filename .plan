@@ -138,6 +138,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added fixture + integration coverage for region-aware consent handling and context attachment publication.
 - Added adapter coverage for MCP-parity control aliases.
 - Stabilized github smoke flow by navigating directly to `/login` and validating fill/wait interactions.
+- Hardened shutdown paths for `open`/`load`/adapter flows with idempotent close handling and benign close-race suppression.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -189,7 +190,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Context-native screenshot handoff (default-on):** completed via automatic attachment publication under `.agent-browser/context/` (`latest.json`, `attachments.jsonl`, latest/archive images).
 
 ### Prioritized Post-Dogfooding Additions (Impact vs Effort)
-- **P0 - Graceful interrupt/shutdown hardening (High impact, Low effort):** make `open`/`load`/adapter shutdown idempotent and suppress known close-race noise so SIGINT/timeout exits stay clean.
+- **P0 - Completed: Graceful interrupt/shutdown hardening** (idempotent session/adapter shutdown, cancellable interrupt waiters, close-race noise suppression).
 - **P0 - First-class feedback-loop runner (High impact, Medium effort):** add a `loop` execution mode that supports action -> observe -> branch with snapshot/assert predicates and optional max-iterations.
 - **P1 - Selector health report (High impact, Medium effort):** emit selector fragility metrics (fallback depth, timeout frequency, ambiguity count) after runs and smoke matrix batches.
 - **P1 - Artifact manifest index (Medium impact, Low effort):** produce a single run index that links trace, timeline, screenshots, visual diffs, and top errors for external tool ingestion. (Partial: `bundle.json` currently links trace/timeline/screenshots/interventions.)

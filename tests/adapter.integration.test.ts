@@ -216,4 +216,23 @@ describe("adapter runtime", () => {
       await runtime.shutdown();
     }
   }, 120_000);
+
+  it("shuts down idempotently when called repeatedly", async () => {
+    const runtime = new AdapterRuntime();
+
+    const created = await runtime.handleRequest({
+      id: "create",
+      method: "createSession",
+      params: {
+        options: {
+          headed: false,
+          deterministic: true,
+          captureScreenshots: false
+        }
+      }
+    });
+
+    expect(created.ok).toBe(true);
+    await Promise.all([runtime.shutdown(), runtime.shutdown(), runtime.shutdown()]);
+  }, 120_000);
 });
