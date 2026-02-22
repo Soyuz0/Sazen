@@ -1,0 +1,33 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://example.com",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "roleName",
+        "role": "link",
+        "name": "Learn more"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "h1",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

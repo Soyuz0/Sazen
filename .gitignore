@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.agent-browser/
+coverage/
+*.log
+traces/
+reports/

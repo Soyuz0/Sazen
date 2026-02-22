@@ -1,0 +1,138 @@
+# Agent-First Browser Plan
+
+## Product Goal
+Build an agent-first Chromium runtime where structured state is primary, actions are atomic/replayable, and humans can watch execution in a visible browser with real-time logs.
+
+## Locked Constraints
+- TypeScript implementation.
+- Visible Chromium by default (headed mode).
+- Real-time logs and action stream.
+- Deterministic-first behavior for reproducible testing.
+- Structured DOM snapshots with stable IDs.
+- Session save/load and trace replay.
+
+## Architecture
+Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Trace Store
+
+- **Control API:** JSON command contract for actions and results.
+- **Orchestrator:** Intent -> atomic operations with stable waits/retries.
+- **Runtime:** Browser lifecycle, tabs, contexts, mocks.
+- **State Layer:** snapshots, diffs, logs, network, timing, artifacts.
+
+## Feature Pillars
+1. **Deterministic Execution**
+   - Reduced motion + disabled animations.
+   - Fixed seed random/time shims.
+   - Wait-for-stable heuristics.
+   - Trace replay with consistency checks.
+
+2. **Structured DOM Interface**
+   - Node IDs, role/name, visibility, interactability, bbox.
+   - Stable semantic references.
+   - Token-optimized output mode.
+
+3. **Atomic Action API**
+   - navigate/click/fill/select/press/wait/snapshot/mock.
+   - Every action returns status + dom diff + logs + network + timings.
+
+4. **Observability**
+   - Console, network, page errors, request failures.
+   - Layout shift + paint/navigation timing collection.
+   - Real-time event feed in CLI.
+
+5. **Persistence + Replay**
+   - Save storage state + URL checkpoints.
+   - Save action traces to disk.
+   - Deterministic replay with hash comparison.
+
+## Initial Deliverables (v0)
+- Headed Chromium runtime.
+- Action execution engine with deterministic mode.
+- Structured snapshot + DOM diff engine.
+- Real-time logs + network capture.
+- CLI (`open`, `run`, `inspect`, `snapshot`, `replay`).
+- Trace save/load and replay validation.
+
+## Current Build Status
+- Implemented: headed Chromium runtime, atomic action execution, snapshot/diff engine, observer pipeline, trace save/replay, session save/load.
+- Implemented CLI: `open`, `inspect`, `describe`, `run`, `act`, `snapshot`, `load`, `replay`, `flake`.
+- Implemented deterministic defaults: reduced motion, random/time shims, layout-shift capture.
+- Implemented tests: contract + snapshot unit tests, integration tests for real app flow + replay + session load + ambiguous role disambiguation.
+- Implemented batch validation runner: `npm run smoke:sites` for sequential multi-site coverage with JSON summary output.
+- Implemented replay upgrades: preflight origin checks, strict/relaxed replay modes, and repeated-run flake detection.
+- Implemented replay upgrades: preflight origin checks, strict/relaxed replay modes, selector-level invariants, and repeated-run flake detection.
+- Implemented trace metadata upgrades: environment contract (`requiredOrigins`) and action timeline summaries.
+- Implemented log noise controls with default filtering and `--raw-logs` override.
+- Implemented viewport control via session options/CLI and script action (`setViewport`).
+- Implemented agent-first page modality output (`describe`) with positional metadata and issue hints.
+- Implemented timeout-guarded site matrix execution (per-operation and per-action timeouts) to prevent hangs.
+- Implemented trace timeline inspection command (`timeline`) with tabular and JSON output.
+
+## Validation Strategy
+- Build local fixture app for dogfooding.
+- Run scripted flow against fixture using visible browser.
+- Verify per-action diffs/logs/network bundles.
+- Run replay and validate expected vs actual DOM hashes.
+
+## Cross-Site Validation Coverage
+- Added multi-site scripted flows in `examples/site-flows` for: example, wikipedia, mdn, npm, github, python, vite, hn, rust, bbc, react, ebay.
+- Each flow performs navigation + at least one interaction step (click/fill/search).
+- Ran matrix repeatedly; latest full pass: 12/12 successful flows with no new blocking bugs.
+- Verified replay behavior on dynamic/public traces: strict mode surfaces real DOM drift, relaxed mode validates stable invariants.
+- Final consecutive matrix pass after replay/flake enhancements also succeeded: 12/12 sites, 0 failures.
+
+## Executed Fixes from Cross-Site Runs
+- Implemented locator candidate fallback chain (test id, id, href, name attr, role/name, css path).
+- Implemented strict-mode disambiguation by defaulting target locators to `.first()` and trying ranked alternatives.
+- Implemented stableRef ranking to prefer visible/actionable matches when duplicate semantic refs exist.
+- Implemented bounded stability waits to avoid 10s stalls on chatty sites (short network-idle budget + quiet window).
+- Improved action resilience by degrading gracefully when post-action snapshot/perf/screenshot capture fails.
+- Added ambiguous-target fixture + integration test to prevent regressions in multi-match role targeting.
+- Added site matrix runner (`npm run smoke:sites`) and machine-readable summary output.
+- Added replay preflight checks to fail fast when required origins are offline.
+- Added relaxed replay mode for dynamic sites where strict DOM hashes are too brittle.
+- Added flake detection command to surface unstable actions across repeated replays.
+- Added selector-level replay invariants (from `waitFor(selector)`) for stronger relaxed-mode validation.
+- Added viewport/action support to test behavior across resolutions.
+- Added offscreen-aware element ranking and visual issue detection in agent page descriptions.
+- Added smoke runner timeout flags (`--operation-timeout-ms`, `--action-timeout-ms`) for safer unattended runs.
+- Standardized manual run logs under `reports/runtime-logs/` for reproducible audit trails.
+
+## Definition of Done (v0)
+- Browser visible and usable while automation runs.
+- Every action emits structured result envelope.
+- Trace save + replay works for deterministic scenarios.
+- Session state save/load restores authenticated/local state.
+- CLI gives clear, real-time debugging output.
+
+## Continuous Roadmap Additions
+
+### Near-Term (v0.x)
+- **Resilient selector healing:** rank fallback locators so small DOM changes do not break actions.
+- **Assertion DSL with auto-wait:** add `expect` primitives for state verification without custom scripts.
+- **Failure triage bundles:** export one artifact pack with trace, screenshots, and event timeline.
+- **Named auth profiles:** switch user roles quickly with isolated saved storage contexts.
+- **Redaction policy packs:** configurable redaction presets for safe trace sharing.
+
+### Medium-Term (v1)
+- **Parallel session scheduler:** run multiple isolated agent sessions concurrently with stable resource control.
+- **Cross-tab/popup orchestration:** first-class primitives for OAuth/payment-style multi-window flows.
+- **Network chaos controls:** deterministic latency/drop/fault injection for resilience testing.
+- **Plugin SDK:** typed hooks for custom actions, validators, and domain adapters.
+- **Goal graph planner:** model tasks as precondition/postcondition graphs instead of only linear scripts.
+
+### Advanced Differentiators
+- **DOM+vision grounding:** combine accessibility tree targeting with visual region matching.
+- **Counterfactual replay analysis:** rerun failing steps under controlled perturbations to isolate root causes.
+- **Policy guardrail engine:** enforce declarative allow/deny rules for navigation, actions, and data movement.
+- **Human checkpoint handoff:** pause for approval and let humans take over headed sessions in place.
+- **Trace provenance query layer:** answer "why this action" using a searchable action/event graph.
+
+## Feature Gaps Found During Dogfooding
+- **Action timeline UI:** add a live timeline view linking each action to screenshot + diff + top events.
+- **Interactive confidence scoring:** rank truly actionable targets higher and down-rank structural labels to reduce misclick risk.
+- **Consent/cookie strategy hooks:** configurable handlers for common consent walls that block navigation on media/e-commerce sites.
+- **Adaptive stability profiles:** tune quiet-window and network-idle budgets per site type to reduce long tail action latency.
+- **Selector-level replay invariants:** add optional per-action invariants (selector exists/text contains) for stronger relaxed-mode guarantees.
+- **Timeline inspector UI:** richer interactive viewer (filters/grouping/artifact previews) beyond current table/JSON output.
+- **Visual regression overlays:** annotate screenshots with failing/targeted elements and compare against baseline captures.

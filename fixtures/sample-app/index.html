@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Browser Fixture</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f2efe8;
+        --ink: #1f1d1a;
+        --panel: #fffaf0;
+        --accent: #1c6e8c;
+        --warn: #ad2e24;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top right, #dbece8 0%, var(--bg) 45%, #e9dcc8 100%);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .card {
+        width: min(540px, 100%);
+        background: var(--panel);
+        border: 1px solid #d2c8b6;
+        border-radius: 14px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+        padding: 24px;
+      }
+
+      .title {
+        margin: 0;
+        font-size: 1.6rem;
+      }
+
+      .subtitle {
+        color: #5a5145;
+        margin-top: 8px;
+      }
+
+      form {
+        display: grid;
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        font-weight: 600;
+      }
+
+      input {
+        border: 1px solid #bfb4a0;
+        background: #fffefb;
+        border-radius: 10px;
+        height: 42px;
+        padding: 0 12px;
+        font-size: 1rem;
+      }
+
+      button {
+        height: 42px;
+        border-radius: 10px;
+        border: 0;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+      }
+
+      .result {
+        margin-top: 16px;
+        min-height: 28px;
+        font-weight: 600;
+      }
+
+      .ok {
+        color: #166534;
+      }
+
+      .error {
+        color: var(--warn);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1 class="title">Agent Fixture Login</h1>
+      <p class="subtitle">Use this page to test semantic targeting and action traces.</p>
+
+      <form id="login-form" data-testid="login-form">
+        <label>
+          Email
+          <input data-testid="email-input" name="email" type="email" placeholder="you@example.com" required />
+        </label>
+
+        <label>
+          Password
+          <input
+            data-testid="password-input"
+            name="password"
+            type="password"
+            placeholder="at least 8 chars"
+            required
+          />
+        </label>
+
+        <button data-testid="submit-button" type="submit">Sign in</button>
+      </form>
+
+      <p id="result" class="result" aria-live="polite"></p>
+    </main>
+
+    <script>
+      const form = document.querySelector('#login-form');
+      const result = document.querySelector('#result');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const formData = new FormData(form);
+        const email = String(formData.get('email') || '').trim();
+        const password = String(formData.get('password') || '').trim();
+
+        console.log('[fixture] submit', { emailLength: email.length, passwordLength: password.length });
+
+        await new Promise((resolve) => setTimeout(resolve, 120));
+
+        if (email.includes('@') && password.length >= 8) {
+          result.className = 'result ok';
+          result.textContent = `Welcome ${email}`;
+          console.log('[fixture] login success');
+        } else {
+          result.className = 'result error';
+          result.textContent = 'Invalid credentials';
+          console.error('[fixture] login failed');
+        }
+      });
+    </script>
+  </body>
+</html>

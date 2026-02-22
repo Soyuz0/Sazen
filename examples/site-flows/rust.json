@@ -1,0 +1,32 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://www.rust-lang.org",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "stableRef",
+        "value": "href:https://rust-lang.org/learn"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "main",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

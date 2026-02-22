@@ -1,0 +1,33 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://www.bbc.com",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "roleName",
+        "role": "link",
+        "name": "News"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "main",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

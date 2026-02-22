@@ -1,0 +1,53 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "setViewport",
+      "width": 1366,
+      "height": 768
+    },
+    {
+      "type": "navigate",
+      "url": "http://localhost:4173",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "fill",
+      "target": {
+        "kind": "css",
+        "selector": "[data-testid='email-input']"
+      },
+      "value": "agent@example.com"
+    },
+    {
+      "type": "fill",
+      "target": {
+        "kind": "css",
+        "selector": "[data-testid='password-input']"
+      },
+      "value": "supersecret"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "css",
+        "selector": "[data-testid='submit-button']"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "#result",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

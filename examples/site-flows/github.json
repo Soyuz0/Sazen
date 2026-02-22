@@ -1,0 +1,33 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://github.com",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "roleName",
+        "role": "link",
+        "name": "Sign in"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "#login_field",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

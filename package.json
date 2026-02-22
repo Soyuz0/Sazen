@@ -1,0 +1,38 @@
+{
+  "name": "agent-browser",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent-first visible Chromium runtime for deterministic project testing",
+  "bin": {
+    "agent-browser": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && node dist/cli.js",
+    "start": "node dist/cli.js",
+    "dev:tsx": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "npm run typecheck",
+    "install:browser": "playwright install chromium",
+    "fixture": "tsx fixtures/server.ts",
+    "flake": "npm run build && node dist/cli.js flake",
+    "smoke:sites": "npm run build && node dist/site-matrix.js",
+    "smoke:sites:headed": "npm run build && node dist/site-matrix.js --headed"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "playwright": "^1.53.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}

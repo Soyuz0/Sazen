@@ -1,0 +1,32 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://www.python.org",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "stableRef",
+        "value": "href:https://docs.python.org/"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "body",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

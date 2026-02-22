@@ -1,0 +1,40 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://www.ebay.com",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "fill",
+      "target": {
+        "kind": "css",
+        "selector": "#gh-ac"
+      },
+      "value": "wireless mouse"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "css",
+        "selector": "#gh-search-btn"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "ul.srp-results",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

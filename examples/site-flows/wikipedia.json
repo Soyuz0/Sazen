@@ -1,0 +1,40 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://www.wikipedia.org",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "fill",
+      "target": {
+        "kind": "css",
+        "selector": "#searchInput"
+      },
+      "value": "Browser automation"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "css",
+        "selector": "button[type='submit']"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "selector",
+        "selector": "#firstHeading",
+        "state": "visible"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

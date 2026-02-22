@@ -1,0 +1,40 @@
+{
+  "settings": {
+    "headed": true,
+    "deterministic": true,
+    "captureScreenshots": true
+  },
+  "actions": [
+    {
+      "type": "navigate",
+      "url": "https://www.npmjs.com",
+      "waitUntil": "domcontentloaded"
+    },
+    {
+      "type": "fill",
+      "target": {
+        "kind": "roleName",
+        "role": "combobox",
+        "name": "Search packages"
+      },
+      "value": "playwright"
+    },
+    {
+      "type": "click",
+      "target": {
+        "kind": "roleName",
+        "role": "button",
+        "name": "Search"
+      }
+    },
+    {
+      "type": "waitFor",
+      "condition": {
+        "kind": "network_idle"
+      }
+    },
+    {
+      "type": "snapshot"
+    }
+  ]
+}

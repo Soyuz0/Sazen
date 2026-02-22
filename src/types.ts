@@ -1,0 +1,389 @@
+export interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface AgentNode {
+  id: string;
+  stableRef: string;
+  tag: string;
+  role: string;
+  name: string;
+  text: string;
+  value: string;
+  visible: boolean;
+  enabled: boolean;
+  editable: boolean;
+  interactive: boolean;
+  boundingBox: BoundingBox;
+  path: string;
+  attributes: Record<string, string>;
+}
+
+export interface DomSnapshot {
+  snapshotId: string;
+  timestamp: number;
+  url: string;
+  title: string;
+  domHash: string;
+  viewport: {
+    width: number;
+    height: number;
+  };
+  nodeCount: number;
+  interactiveCount: number;
+  nodes: AgentNode[];
+}
+
+export interface NodeChange {
+  field: "text" | "value" | "visible" | "enabled" | "name";
+  before: string | boolean;
+  after: string | boolean;
+}
+
+export interface ChangedNode {
+  id: string;
+  stableRef: string;
+  changes: NodeChange[];
+}
+
+export interface DomDiffSummary {
+  added: number;
+  removed: number;
+  changed: number;
+}
+
+export interface DomDiff {
+  beforeSnapshotId: string;
+  afterSnapshotId: string;
+  added: AgentNode[];
+  removed: AgentNode[];
+  changed: ChangedNode[];
+  summary: DomDiffSummary;
+}
+
+export type ConsoleLevel = "log" | "debug" | "info" | "warn" | "error";
+
+export interface BaseEvent {
+  seq: number;
+  timestamp: number;
+}
+
+export interface ConsoleEvent extends BaseEvent {
+  kind: "console";
+  level: ConsoleLevel;
+  text: string;
+  location?: {
+    url?: string;
+    lineNumber?: number;
+    columnNumber?: number;
+  };
+}
+
+export interface PageErrorEvent extends BaseEvent {
+  kind: "page_error";
+  message: string;
+  stack?: string;
+}
+
+export interface NetworkEvent extends BaseEvent {
+  kind: "network";
+  phase: "request" | "response" | "request_failed";
+  method: string;
+  url: string;
+  resourceType: string;
+  status?: number;
+  statusText?: string;
+  failureText?: string;
+}
+
+export type ObserverEvent = ConsoleEvent | PageErrorEvent | NetworkEvent;
+
+export interface PerformanceMetrics {
+  domContentLoadedMs: number | null;
+  loadMs: number | null;
+  firstPaintMs: number | null;
+  firstContentfulPaintMs: number | null;
+  layoutShiftScore: number;
+}
+
+export type ActionStatus = "ok" | "retryable_error" | "fatal_error";
+
+export type NodeTarget =
+  | {
+      kind: "node";
+      nodeId: string;
+    }
+  | {
+      kind: "stableRef";
+      value: string;
+    }
+  | {
+      kind: "roleName";
+      role: string;
+      name: string;
+    }
+  | {
+      kind: "css";
+      selector: string;
+    };
+
+export interface NavigateAction {
+  type: "navigate";
+  url: string;
+  waitUntil?: "load" | "domcontentloaded" | "networkidle";
+  timeoutMs?: number;
+}
+
+export interface ClickAction {
+  type: "click";
+  nodeId?: string;
+  target?: NodeTarget;
+  timeoutMs?: number;
+}
+
+export interface FillAction {
+  type: "fill";
+  value: string;
+  nodeId?: string;
+  target?: NodeTarget;
+  timeoutMs?: number;
+}
+
+export interface SelectAction {
+  type: "select";
+  value: string;
+  nodeId?: string;
+  target?: NodeTarget;
+  timeoutMs?: number;
+}
+
+export interface PressAction {
+  type: "press";
+  key: string;
+  timeoutMs?: number;
+}
+
+export type WaitCondition =
+  | {
+      kind: "timeout";
+      ms: number;
+    }
+  | {
+      kind: "selector";
+      selector: string;
+      state?: "attached" | "detached" | "visible" | "hidden";
+    }
+  | {
+      kind: "network_idle";
+    };
+
+export interface WaitForAction {
+  type: "waitFor";
+  condition: WaitCondition;
+  timeoutMs?: number;
+}
+
+export interface SnapshotAction {
+  type: "snapshot";
+}
+
+export interface SetViewportAction {
+  type: "setViewport";
+  width: number;
+  height: number;
+}
+
+export interface MockRouteAction {
+  type: "mock";
+  route: {
+    method?: string;
+    urlPattern: string;
+    status?: number;
+    headers?: Record<string, string>;
+    contentType?: string;
+    body?: string;
+    json?: unknown;
+  };
+}
+
+export type Action =
+  | NavigateAction
+  | ClickAction
+  | FillAction
+  | SelectAction
+  | PressAction
+  | WaitForAction
+  | SnapshotAction
+  | SetViewportAction
+  | MockRouteAction;
+
+export interface ActionResult {
+  actionId: string;
+  sessionId: string;
+  tabId: string;
+  status: ActionStatus;
+  action: Action;
+  startedAt: number;
+  finishedAt: number;
+  durationMs: number;
+  preSnapshot: DomSnapshot;
+  postSnapshot: DomSnapshot;
+  domDiff: DomDiff;
+  events: ObserverEvent[];
+  performance: PerformanceMetrics;
+  screenshotPath?: string;
+  resolvedNodeId?: string;
+  error?: {
+    message: string;
+    stack?: string;
+  };
+}
+
+export interface TraceRecord {
+  action: Action;
+  result: {
+    status: ActionStatus;
+    postDomHash: string;
+    durationMs: number;
+    postUrl?: string;
+    postTitle?: string;
+    postInteractiveCount?: number;
+    waitForSelector?: string;
+    networkErrorCount?: number;
+    eventCount?: number;
+    errorMessage?: string;
+  };
+}
+
+export interface TraceEnvironment {
+  requiredOrigins: string[];
+}
+
+export interface TraceTimelineEntry {
+  index: number;
+  actionType: Action["type"];
+  status: ActionStatus;
+  durationMs: number;
+  postUrl: string;
+  postDomHash: string;
+  domDiffSummary: DomDiffSummary;
+  eventCount: number;
+  screenshotPath?: string;
+}
+
+export interface SavedTrace {
+  version: 1 | 2;
+  createdAt: string;
+  sessionId: string;
+  options: AgentSessionOptions;
+  environment?: TraceEnvironment;
+  timeline?: TraceTimelineEntry[];
+  records: TraceRecord[];
+}
+
+export interface SavedSession {
+  version: 1;
+  createdAt: string;
+  name: string;
+  url: string;
+  storageStatePath: string;
+}
+
+export interface AgentSessionOptions {
+  headed?: boolean;
+  deterministic?: boolean;
+  slowMoMs?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  actionTimeoutMs?: number;
+  stableWaitMs?: number;
+  captureScreenshots?: boolean;
+  artifactsDir?: string;
+  storageStatePath?: string;
+  logRedactionPatterns?: RegExp[];
+  logNoiseFiltering?: boolean;
+}
+
+export type SuggestedAction = "click" | "fill" | "select";
+
+export interface AgentElementDescription {
+  id: string;
+  stableRef: string;
+  role: string;
+  name: string;
+  text: string;
+  bbox: BoundingBox;
+  inViewport: boolean;
+  visible: boolean;
+  enabled: boolean;
+  interactive: boolean;
+  location: string;
+  suggestedActions: SuggestedAction[];
+}
+
+export interface AgentPageDescription {
+  snapshotId: string;
+  url: string;
+  title: string;
+  domHash: string;
+  viewport: {
+    width: number;
+    height: number;
+  };
+  summary: string;
+  interactiveElements: AgentElementDescription[];
+  potentialIssues: string[];
+  screenshotPath?: string;
+}
+
+export interface ActionScript {
+  settings?: Partial<AgentSessionOptions>;
+  actions: Action[];
+}
+
+export interface ReplayReport {
+  tracePath: string;
+  mode: ReplayMode;
+  totalActions: number;
+  matched: number;
+  mismatched: number;
+  preflight: {
+    checkedOrigins: string[];
+    skipped: boolean;
+  };
+  invariants: {
+    selectorEnabled: boolean;
+    selectorChecks: number;
+    selectorMismatches: number;
+  };
+  mismatches: Array<{
+    index: number;
+    reason: "dom_hash" | "status" | "url" | "selector_invariant";
+    expected: string;
+    actual: string;
+    actionType: Action["type"];
+  }>;
+}
+
+export type ReplayMode = "strict" | "relaxed";
+
+export interface ReplayOptions {
+  mode?: ReplayMode;
+  preflight?: boolean;
+  preflightTimeoutMs?: number;
+  selectorInvariants?: boolean;
+}
+
+export interface FlakeReport {
+  tracePath: string;
+  runs: number;
+  mode: ReplayMode;
+  unstableActions: Array<{
+    index: number;
+    actionType: Action["type"];
+    mismatchRuns: number;
+  }>;
+}
