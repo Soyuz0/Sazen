@@ -7,6 +7,7 @@ import type {
   LoopIterationResult,
   LoopPredicate,
   LoopPredicateResult,
+  LoopMetricsReport,
   LoopRunReport,
   LoopScript
 } from "./types.js";
@@ -103,6 +104,62 @@ export async function runLoop(session: AgentSession, script: LoopScript): Promis
     maxIterations,
     iterations,
     stopReason: "max_iterations"
+  };
+}
+
+export function buildLoopMetricsReport(report: LoopRunReport): LoopMetricsReport {
+  const stepDurations = report.iterations.map((iteration) => iteration.stepResult.durationMs);
+  const iterationTotals = report.iterations.map((iteration) => {
+    const branchDurations = iteration.selectedBranchActionResults.reduce(
+      (sum, actionResult) => sum + actionResult.durationMs,
+      0
+    );
+    return iteration.stepResult.durationMs + branchDurations;
+  });
+
+  const branchSelection: Record<string, number> = {};
+  const transitionCounts = new Map<string, number>();
+
+  let previousLabel = "(start)";
+  for (const iteration of report.iterations) {
+    const label = iteration.selectedBranchLabel ?? "(none)";
+    branchSelection[label] = (branchSelection[label] ?? 0) + 1;
+
+    const transitionKey = `${previousLabel}->${label}`;
+    transitionCounts.set(transitionKey, (transitionCounts.get(transitionKey) ?? 0) + 1);
+    previousLabel = label;
+  }
+
+  const selectedBranchTransitions = [...transitionCounts.entries()]
+    .map(([key, count]) => {
+      const arrowIndex = key.indexOf("->");
+      return {
+        from: key.slice(0, arrowIndex),
+        to: key.slice(arrowIndex + 2),
+        count
+      };
+    })
+    .sort((left, right) => {
+      if (right.count !== left.count) {
+        return right.count - left.count;
+      }
+      if (left.from !== right.from) {
+        return left.from.localeCompare(right.from);
+      }
+      return left.to.localeCompare(right.to);
+    });
+
+  return {
+    createdAt: new Date().toISOString(),
+    iterationCount: report.iterations.length,
+    maxIterations: report.maxIterations,
+    stopReason: report.stopReason,
+    durationsMs: {
+      step: buildDurationSummary(stepDurations),
+      iterationTotal: buildDurationSummary(iterationTotals)
+    },
+    branchSelection,
+    selectedBranchTransitions
   };
 }
 
@@ -318,4 +375,42 @@ function truncateDetail(input: string): string {
     return input;
   }
   return `${input.slice(0, 117)}...`;
+}
+
+function buildDurationSummary(values: number[]): {
+  average: number;
+  p50: number;
+  p95: number;
+  max: number;
+} {
+  if (values.length === 0) {
+    return {
+      average: 0,
+      p50: 0,
+      p95: 0,
+      max: 0
+    };
+  }
+
+  return {
+    average: round(values.reduce((sum, value) => sum + value, 0) / values.length, 2),
+    p50: percentile(values, 50),
+    p95: percentile(values, 95),
+    max: Math.max(...values)
+  };
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const rank = Math.max(0, Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[rank] ?? 0;
+}
+
+function round(value: number, precision: number): number {
+  const factor = Math.pow(10, precision);
+  return Math.round(value * factor) / factor;
 }

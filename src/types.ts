@@ -642,6 +642,33 @@ export interface LoopRunReport {
   stopReason: "branch_break" | "no_branch_match" | "max_iterations" | "step_error";
 }
 
+export interface LoopMetricsReport {
+  createdAt: string;
+  iterationCount: number;
+  maxIterations: number;
+  stopReason: LoopRunReport["stopReason"];
+  durationsMs: {
+    step: {
+      average: number;
+      p50: number;
+      p95: number;
+      max: number;
+    };
+    iterationTotal: {
+      average: number;
+      p50: number;
+      p95: number;
+      max: number;
+    };
+  };
+  branchSelection: Record<string, number>;
+  selectedBranchTransitions: Array<{
+    from: string;
+    to: string;
+    count: number;
+  }>;
+}
+
 export interface SelectorHealthTopTarget {
   target: string;
   total: number;

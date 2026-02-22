@@ -19,7 +19,7 @@ import {
 } from "./drift-monitor.js";
 import { renderLiveTimelineTuiFrame, toLiveTimelineEntry, type LiveTimelineEntry } from "./live-timeline.js";
 import { OpenCodeAdapterBridge } from "./opencode-adapter.js";
-import { runLoop } from "./loop.js";
+import { buildLoopMetricsReport, runLoop } from "./loop.js";
 import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
 import { buildRunArtifactIndex } from "./run-index.js";
@@ -457,6 +457,7 @@ function configureLoopCommand(root: Command): void {
     .option("--save <name>", "Save session on completion")
     .option("--logs", "Print captured events for loop actions", false)
     .option("--max-iterations <n>", "Override script max iterations")
+    .option("--loop-metrics-out <path>", "Output file or directory for loop metrics", "reports/loop-metrics")
     .option("--loop-log-every <n>", "Print detailed loop rows every N iterations", "1")
     .option("--loop-summary-only", "Print compact per-iteration summaries only", false)
     .option(
@@ -505,6 +506,16 @@ function configureLoopCommand(root: Command): void {
 
         console.log(`Loop stop reason: ${report.stopReason}`);
         console.log(`Iterations: ${report.iterations.length}/${report.maxIterations}`);
+
+        const loopMetrics = buildLoopMetricsReport(report);
+        const loopMetricsOutBase =
+          typeof options.loopMetricsOut === "string" ? options.loopMetricsOut : "reports/loop-metrics";
+        const loopMetricsRefPath =
+          typeof options.trace === "string" && options.trace.length > 0 ? resolve(options.trace) : absolutePath;
+        const loopMetricsPath = resolveJsonOutputPath(loopMetricsOutBase, loopMetricsRefPath, "loop-metrics");
+        await mkdir(dirname(loopMetricsPath), { recursive: true });
+        await writeFile(loopMetricsPath, JSON.stringify(loopMetrics, null, 2), "utf8");
+        console.log(`Loop metrics -> ${loopMetricsPath}`);
 
         let previousBranchSignature: string | undefined;
         for (const iteration of report.iterations) {
