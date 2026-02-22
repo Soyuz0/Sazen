@@ -125,6 +125,13 @@ const actionSchemaCore = z.discriminatedUnion("type", [
     width: z.number().int().positive(),
     height: z.number().int().positive()
   }),
+  actionBaseSchema.extend({
+    type: z.literal("switchProfile"),
+    profile: z.string().min(1),
+    profilesRoot: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
+    waitUntil: z.enum(["load", "domcontentloaded", "networkidle"]).optional()
+  }),
   z.object({
     type: z.literal("mock"),
     route: z.object({

@@ -186,6 +186,93 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("switches profiles within a single trace using switchProfile action", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-switch-profile-"));
+    const profilesRoot = join(tempDir, "profiles");
+    const profileUrl = `${fixture.baseUrl}/profile-switch.html`;
+
+    const saveProfile = async (name: string, selector: string) => {
+      const profileSession = new AgentSession({
+        headed: false,
+        deterministic: true,
+        captureScreenshots: false,
+        artifactsDir: tempDir
+      });
+
+      try {
+        await profileSession.start();
+        const nav = await profileSession.perform({ type: "navigate", url: profileUrl });
+        expect(nav.status).toBe("ok");
+
+        const click = await profileSession.perform({
+          type: "click",
+          target: {
+            kind: "css",
+            selector
+          }
+        });
+        expect(click.status).toBe("ok");
+
+        const manifestPath = await profileSession.saveSession(name, profilesRoot);
+        expect(manifestPath).toContain("session.json");
+      } finally {
+        await profileSession.close();
+      }
+    };
+
+    await saveProfile("admin", "#set-admin");
+    await saveProfile("user", "#set-user");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+
+      const adminSwitch = await session.perform({
+        type: "switchProfile",
+        profile: "admin",
+        profilesRoot
+      });
+      expect(adminSwitch.status).toBe("ok");
+      expect(adminSwitch.postSnapshot.url).toContain("profile-switch.html");
+
+      const adminAssert = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "selector",
+          selector: "#current-profile",
+          textContains: "admin"
+        }
+      });
+      expect(adminAssert.status).toBe("ok");
+
+      const userSwitch = await session.perform({
+        type: "switchProfile",
+        profile: "user",
+        profilesRoot
+      });
+      expect(userSwitch.status).toBe("ok");
+
+      const userAssert = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "selector",
+          selector: "#current-profile",
+          textContains: "user"
+        }
+      });
+      expect(userAssert.status).toBe("ok");
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("handles ambiguous role targets by selecting actionable candidates", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-ambiguous-"));
 

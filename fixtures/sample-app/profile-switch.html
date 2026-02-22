@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profile Switch Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(155deg, #f8fafc 0%, #e2e8f0 100%);
+        font-family: "Segoe UI", sans-serif;
+        color: #0f172a;
+      }
+
+      main {
+        width: min(460px, calc(100vw - 40px));
+        border: 1px solid #cbd5e1;
+        border-radius: 14px;
+        background: white;
+        padding: 20px;
+        box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      #set-admin {
+        background: #0284c7;
+        color: #082f49;
+      }
+
+      #set-user {
+        background: #22c55e;
+        color: #052e16;
+      }
+
+      #current-profile {
+        margin-top: 16px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Profile Switch Fixture</h1>
+      <p>Set profile state and verify switchProfile behavior.</p>
+
+      <div class="actions">
+        <button id="set-admin" data-testid="set-admin" type="button">Set admin</button>
+        <button id="set-user" data-testid="set-user" type="button">Set user</button>
+      </div>
+
+      <p id="current-profile">profile: anonymous</p>
+    </main>
+
+    <script>
+      const profileNode = document.querySelector('#current-profile');
+      const key = 'fixture-profile';
+
+      function applyProfile(value) {
+        localStorage.setItem(key, value);
+        profileNode.textContent = `profile: ${value}`;
+      }
+
+      document.querySelector('#set-admin').addEventListener('click', () => {
+        applyProfile('admin');
+      });
+
+      document.querySelector('#set-user').addEventListener('click', () => {
+        applyProfile('user');
+      });
+
+      const existing = localStorage.getItem(key);
+      if (existing) {
+        profileNode.textContent = `profile: ${existing}`;
+      }
+    </script>
+  </body>
+</html>

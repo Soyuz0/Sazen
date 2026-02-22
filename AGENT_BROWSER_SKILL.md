@@ -55,6 +55,7 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 - Use `loop` for bounded iterative workflows that need predicate-based branching.
 - Keep deterministic mode enabled unless explicitly diagnosing runtime drift.
 - Use semantic targets first (`roleName`, `stableRef`, `node`) and CSS only as fallback.
+- Use `switchProfile` inside scripts when a single run needs role transitions (for example, user to admin).
 - If strict replay mismatches on public/dynamic pages, retry with relaxed replay + selector invariants.
 - For unstable traces, run `flake` before changing selectors.
 

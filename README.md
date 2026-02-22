@@ -147,10 +147,30 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
       "type": "assert",
       "condition": { "kind": "selector", "selector": "#status", "textContains": "Welcome" }
     },
+    {
+      "type": "switchProfile",
+      "profile": "admin",
+      "profilesRoot": ".agent-browser/profiles"
+    },
     { "type": "snapshot" }
   ]
 }
 ```
+
+### Trace-scoped profile switching
+
+```json
+{
+  "type": "switchProfile",
+  "profile": "admin",
+  "profilesRoot": ".agent-browser/profiles",
+  "waitUntil": "domcontentloaded"
+}
+```
+
+- `switchProfile` loads a saved profile session inside the current run trace.
+- This enables role transitions (for example, user -> admin) without ending the run.
+- Defaults to the saved profile URL from the profile manifest unless `url` is provided.
 
 ### Assertion conditions
 - `selector` (state + optional textContains)

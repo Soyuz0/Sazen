@@ -134,39 +134,7 @@ export class AgentSession {
       headless: !headed,
       slowMo: this.options.slowMoMs ?? DEFAULT_OPTIONS.slowMoMs
     });
-
-    this.context = await this.browser.newContext({
-      viewport: {
-        width: this.options.viewportWidth ?? DEFAULT_OPTIONS.viewportWidth,
-        height: this.options.viewportHeight ?? DEFAULT_OPTIONS.viewportHeight
-      },
-      storageState: this.options.storageStatePath
-    });
-
-    this.page = await this.context.newPage();
-
-    if (this.options.browserOverlay ?? DEFAULT_OPTIONS.browserOverlay) {
-      await this.installBrowserOverlay();
-    }
-
-    await installLayoutShiftCapture(this.page);
-    if (this.options.deterministic ?? DEFAULT_OPTIONS.deterministic) {
-      await applyDeterministicSettings(this.page, defaultDeterministicOptions);
-    }
-
-    const redaction =
-      this.options.logRedactionPatterns ??
-      defaultRedactionPatterns(this.options.redactionPack ?? DEFAULT_OPTIONS.redactionPack);
-    this.observer = new BrowserObserver(
-      this.context,
-      this.page,
-      redaction,
-      this.options.logNoiseFiltering ?? true
-    );
-    this.observer.start();
-
-    this.lastSnapshot = await takeDomSnapshot(this.page);
-    this.lastKnownStorageSnapshot = await this.captureStorageSnapshot();
+    await this.initializeContext(this.options.storageStatePath);
   }
 
   subscribe(listener: (event: ObserverEvent) => void): () => void {
@@ -303,8 +271,8 @@ export class AgentSession {
 
   async perform(rawAction: Action): Promise<ActionResult> {
     const action = parseAction(rawAction) as Action;
-    const page = this.requirePage();
-    const observer = this.requireObserver();
+    let page = this.requirePage();
+    let observer = this.requireObserver();
     await this.waitForExecutionResume();
 
     const startedAt = Date.now();
@@ -323,6 +291,8 @@ export class AgentSession {
       resolvedBoundingBox = execution.resolvedBoundingBox;
       pauseElapsedMs = execution.pauseElapsedMs;
       await this.waitForStability(action, getActionTimeout(action));
+      page = this.requirePage();
+      observer = this.requireObserver();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       status = isRetryableError(message) ? "retryable_error" : "fatal_error";
@@ -333,6 +303,12 @@ export class AgentSession {
     }
 
     let postSnapshot: DomSnapshot;
+    try {
+      page = this.requirePage();
+    } catch {
+      // Keep last known page reference for fallback metadata.
+    }
+
     try {
       postSnapshot = await takeDomSnapshot(page);
     } catch (captureError) {
@@ -352,9 +328,15 @@ export class AgentSession {
     this.lastSnapshot = postSnapshot;
     this.lastKnownStorageSnapshot = await this.captureStorageSnapshot().catch(() => this.lastKnownStorageSnapshot);
     const domDiff = diffSnapshots(preSnapshot, postSnapshot);
+    try {
+      observer = this.requireObserver();
+    } catch {
+      // Keep previous observer reference when context swap failed.
+    }
     const events = observer.drain();
     let performance = defaultPerformanceMetrics();
     try {
+      page = this.requirePage();
       performance = await collectPerformanceMetrics(page);
     } catch (perfError) {
       const message = perfError instanceof Error ? perfError.message : String(perfError);
@@ -471,6 +453,9 @@ export class AgentSession {
     if (action.type === "navigate") {
       noteOriginFromUrl(this.requiredOrigins, action.url);
     }
+    if (action.type === "switchProfile" && action.url) {
+      noteOriginFromUrl(this.requiredOrigins, action.url);
+    }
 
     return result;
   }
@@ -543,6 +528,44 @@ export class AgentSession {
     await session.start();
     await session.perform({ type: "navigate", url: manifest.url, waitUntil: "domcontentloaded" });
     return session;
+  }
+
+  private async switchProfile(action: Extract<Action, { type: "switchProfile" }>): Promise<void> {
+    const browser = this.requireBrowser();
+    const activeContext = this.context;
+    if (activeContext) {
+      await activeContext.close().catch((error) => {
+        if (!isBenignCloseError(error)) {
+          throw error;
+        }
+      });
+    }
+
+    this.context = null;
+    this.page = null;
+    this.observer = null;
+    this.mockRoutingReady = false;
+
+    const profilesRoot = action.profilesRoot ?? ".agent-browser/profiles";
+    const manifestPath = resolve(profilesRoot, action.profile, "session.json");
+    const rawManifest = await readFile(manifestPath, "utf8");
+    const manifest = JSON.parse(rawManifest) as SavedSession;
+
+    this.browser = browser;
+    await this.initializeContext(manifest.storageStatePath);
+
+    const targetUrl = action.url ?? manifest.url;
+    if (targetUrl && targetUrl.length > 0) {
+      const page = this.requirePage();
+      const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
+      await page.goto(targetUrl, {
+        waitUntil: action.waitUntil ?? "domcontentloaded",
+        timeout
+      });
+      noteOriginFromUrl(this.requiredOrigins, targetUrl);
+      this.lastSnapshot = await takeDomSnapshot(page);
+      this.lastKnownStorageSnapshot = await this.captureStorageSnapshot().catch(() => this.lastKnownStorageSnapshot);
+    }
   }
 
   async close(): Promise<void> {
@@ -680,6 +703,11 @@ export class AgentSession {
 
       case "setViewport": {
         await page.setViewportSize({ width: action.width, height: action.height });
+        return {};
+      }
+
+      case "switchProfile": {
+        await this.switchProfile(action);
         return {};
       }
 
@@ -1093,6 +1121,48 @@ export class AgentSession {
     return filePath;
   }
 
+  private async initializeContext(storageStatePath?: string): Promise<void> {
+    const browser = this.requireBrowser();
+
+    this.context = await browser.newContext({
+      viewport: {
+        width: this.options.viewportWidth ?? DEFAULT_OPTIONS.viewportWidth,
+        height: this.options.viewportHeight ?? DEFAULT_OPTIONS.viewportHeight
+      },
+      storageState: storageStatePath
+    });
+
+    this.page = await this.context.newPage();
+
+    if (this.options.browserOverlay ?? DEFAULT_OPTIONS.browserOverlay) {
+      await this.installBrowserOverlay();
+    }
+
+    await installLayoutShiftCapture(this.page);
+    if (this.options.deterministic ?? DEFAULT_OPTIONS.deterministic) {
+      await applyDeterministicSettings(this.page, defaultDeterministicOptions);
+    }
+
+    const redaction =
+      this.options.logRedactionPatterns ??
+      defaultRedactionPatterns(this.options.redactionPack ?? DEFAULT_OPTIONS.redactionPack);
+    this.observer = new BrowserObserver(
+      this.context,
+      this.page,
+      redaction,
+      this.options.logNoiseFiltering ?? true
+    );
+    this.observer.start();
+
+    this.mockRoutingReady = false;
+    if (this.mockRules.length > 0) {
+      await this.ensureMockRouting();
+    }
+
+    this.lastSnapshot = await takeDomSnapshot(this.page);
+    this.lastKnownStorageSnapshot = await this.captureStorageSnapshot();
+  }
+
   private async addMockRoute(route: Extract<Action, { type: "mock" }>["route"]): Promise<void> {
     await this.ensureMockRouting();
 
@@ -1435,6 +1505,13 @@ export class AgentSession {
       return this.executionPausedMsTotal;
     }
     return this.executionPausedMsTotal + Math.max(0, Date.now() - this.executionPauseStartedAt);
+  }
+
+  private requireBrowser(): Browser {
+    if (!this.browser) {
+      throw new Error("Session not started; call start() first");
+    }
+    return this.browser;
   }
 
   private requirePage(): Page {

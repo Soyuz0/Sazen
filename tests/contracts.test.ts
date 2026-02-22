@@ -125,6 +125,17 @@ describe("contracts", () => {
       note: "manual-check"
     });
     expect(pauseAction.type).toBe("pause");
+
+    const profileSwitch = parseAction({
+      type: "switchProfile",
+      profile: "admin",
+      profilesRoot: ".agent-browser/profiles",
+      waitUntil: "domcontentloaded"
+    });
+    expect(profileSwitch.type).toBe("switchProfile");
+    if (profileSwitch.type === "switchProfile") {
+      expect(profileSwitch.profile).toBe("admin");
+    }
   });
 
   it("parses loop scripts with snapshot and assert predicates", () => {

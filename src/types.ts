@@ -248,6 +248,15 @@ export interface SetViewportAction {
   height: number;
 }
 
+export interface SwitchProfileAction {
+  type: "switchProfile";
+  profile: string;
+  profilesRoot?: string;
+  url?: string;
+  waitUntil?: "load" | "domcontentloaded" | "networkidle";
+  timeoutMs?: number;
+}
+
 export interface MockRouteAction {
   type: "mock";
   route: {
@@ -273,6 +282,7 @@ export type Action =
   | WaitForAction
   | SnapshotAction
   | SetViewportAction
+  | SwitchProfileAction
   | MockRouteAction;
 
 export interface ActionResult {
