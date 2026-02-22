@@ -49,6 +49,12 @@ npm run dev -- flake traces/sample-trace.json --runs 5 --mode strict
 # inspect stored trace timeline
 npm run dev -- timeline traces/sample-trace.json --limit 20
 
+# render interactive timeline HTML report
+npm run dev -- timeline-html traces/sample-trace.json
+
+# compare visual regressions between two traces
+npm run dev -- visual-diff traces/baseline.json traces/candidate.json
+
 # create a triage bundle for sharing/debugging
 npm run dev -- bundle traces/sample-trace.json
 
@@ -117,8 +123,13 @@ npm test
 
 ## Timeline and bundles
 - `timeline` supports `--status`, `--action`, `--artifacts`, and `--json` output modes.
+- `timeline-html` creates an interactive HTML timeline view with screenshot previews and client-side filtering.
 - `bundle` creates a triage package in `reports/triage-bundles/` with trace + timeline manifest + screenshot references.
 - Add `--copy-artifacts` to copy screenshot files into the bundle directory.
+
+## Visual diffs
+- `visual-diff` compares screenshots from two traces step-by-step.
+- It writes diff overlays to `reports/visual-diff/` by default and can fail when differences exceed `--fail-ratio`.
 
 ## Resolution / viewport
 - Set viewport for any CLI run with `--viewport WIDTHxHEIGHT` (example: `--viewport 1920x1080`).

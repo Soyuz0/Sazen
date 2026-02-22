@@ -76,6 +76,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented configurable redaction policy packs (`default`, `strict`, `off`).
 - Implemented named profile aliases (`profile-save`, `profile-load`) for reusable authenticated sessions.
 - Implemented visual assertion primitives (`selector_bbox_min`, `selector_overlap_max`).
+- Implemented interactive timeline HTML report generation (`timeline-html`).
+- Implemented screenshot-based visual regression overlays (`visual-diff`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -113,6 +115,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Replaced unstable npmjs smoke flow (Cloudflare challenge) with nodejs.org flow for deterministic matrix reliability.
 - Replaced unstable ebay smoke flow with books.toscrape flow for deterministic e-commerce-style coverage.
 - Added profile command wrappers to simplify session save/load workflows for role-based testing.
+- Added CLI-level visual diff thresholding and fail conditions for regression gating.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -143,7 +146,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Trace provenance query layer:** answer "why this action" using a searchable action/event graph.
 
 ## Feature Gaps Found During Dogfooding
-- **Action timeline UI:** add a live timeline view linking each action to screenshot + diff + top events.
+- **Action timeline UI:** live-updating timeline view while session runs (current timeline UI is post-run/report-based).
 - **Consent/cookie strategy hooks:** extend generic accept/reject logic with site-specific adapters and region-aware variants.
-- **Timeline inspector UI:** richer interactive viewer (filters/grouping/artifact previews) beyond current table/JSON output.
-- **Visual regression overlays:** annotate screenshots with failing/targeted elements and compare against baseline captures.
+- **Timeline inspector UI:** richer grouping/searching and per-action deep panes beyond current HTML table/filters.
+- **Element-aware visual overlays:** annotate diff images with target node boxes and semantic labels.

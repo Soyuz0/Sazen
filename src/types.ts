@@ -436,3 +436,27 @@ export interface FlakeReport {
     mismatchRuns: number;
   }>;
 }
+
+export interface VisualDiffEntry {
+  index: number;
+  actionType: Action["type"];
+  baselineScreenshotPath?: string;
+  candidateScreenshotPath?: string;
+  status: "ok" | "different" | "missing_baseline" | "missing_candidate" | "size_mismatch";
+  mismatchPixels: number;
+  totalPixels: number;
+  mismatchRatio: number;
+  width?: number;
+  height?: number;
+  diffImagePath?: string;
+}
+
+export interface VisualDiffReport {
+  baselineTracePath: string;
+  candidateTracePath: string;
+  compared: number;
+  different: number;
+  missing: number;
+  sizeMismatches: number;
+  entries: VisualDiffEntry[];
+}

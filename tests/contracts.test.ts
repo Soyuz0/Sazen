@@ -8,6 +8,8 @@ describe("contracts", () => {
         headed: false,
         deterministic: true,
         stabilityProfile: "chatty",
+        screenshotMode: "fullpage",
+        redactionPack: "strict",
         viewportWidth: 1280,
         viewportHeight: 800
       },
@@ -29,6 +31,8 @@ describe("contracts", () => {
     expect(parsed.actions[0].type).toBe("navigate");
     expect(parsed.settings?.viewportWidth).toBe(1280);
     expect(parsed.settings?.stabilityProfile).toBe("chatty");
+    expect(parsed.settings?.screenshotMode).toBe("fullpage");
+    expect(parsed.settings?.redactionPack).toBe("strict");
   });
 
   it("rejects invalid click action with no target", () => {

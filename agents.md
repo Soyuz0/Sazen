@@ -94,6 +94,7 @@ These rules define how autonomous agents should operate when using this browser 
 - In each site flow, perform actual navigation steps (not just landing page loads).
 - Continue iteration until consecutive multi-site runs reveal no new bugs.
 - For long smoke runs, set explicit timeout flags and persist run logs to `reports/runtime-logs/`.
+- When comparing behavior changes, run `visual-diff` between baseline/candidate traces to catch visual regressions.
 
 ## 15) Execute Findings, Not Just Record Them
 - Every meaningful bug discovered during site runs should be triaged and implemented when feasible.

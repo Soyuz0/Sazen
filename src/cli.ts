@@ -9,7 +9,9 @@ import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
 import { AgentSession } from "./session.js";
 import { createAgentPageDescription, tokenOptimizedSnapshot } from "./snapshot.js";
+import { writeTimelineHtmlReport } from "./timeline-html.js";
 import { getTraceTimeline, loadSavedTrace } from "./trace.js";
+import { compareTraceVisuals } from "./visual.js";
 import type { Action, ActionResult, AgentSessionOptions, ReplayMode } from "./types.js";
 
 const program = new Command();
@@ -31,6 +33,8 @@ configureReplayCommand(program);
 configureFlakeCommand(program);
 configureTimelineCommand(program);
 configureBundleCommand(program);
+configureTimelineHtmlCommand(program);
+configureVisualDiffCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
@@ -541,6 +545,69 @@ function configureBundleCommand(root: Command): void {
     });
 }
 
+function configureTimelineHtmlCommand(root: Command): void {
+  root
+    .command("timeline-html")
+    .description("Render an interactive HTML timeline report")
+    .argument("<tracePath>", "Path to trace JSON")
+    .option("--out <dir>", "Output directory", "reports/timeline-html")
+    .option("--limit <n>", "Max rows in HTML report")
+    .option("--title <text>", "Custom report title")
+    .action(async (tracePath: string, options: Record<string, string | boolean>) => {
+      const outDir = typeof options.out === "string" ? options.out : "reports/timeline-html";
+      const limit = toOptionalNumber(options.limit);
+      const title = typeof options.title === "string" ? options.title : undefined;
+
+      const report = await writeTimelineHtmlReport(tracePath, {
+        outDir,
+        title,
+        limit
+      });
+
+      console.log(`Timeline HTML: ${report.htmlPath}`);
+      console.log(`Rows: ${report.rows}`);
+    });
+}
+
+function configureVisualDiffCommand(root: Command): void {
+  root
+    .command("visual-diff")
+    .description("Compare screenshots from two traces and create visual diff overlays")
+    .argument("<baselineTrace>", "Baseline trace path")
+    .argument("<candidateTrace>", "Candidate trace path")
+    .option("--out <dir>", "Output directory", "reports/visual-diff")
+    .option("--threshold <n>", "Pixelmatch threshold (0-1)", "0.1")
+    .option("--fail-ratio <n>", "Fail when mismatch ratio exceeds this value", "0.01")
+    .option("--max-steps <n>", "Max number of steps to compare")
+    .option("--json", "Print report as JSON", false)
+    .option("--no-write-diffs", "Skip writing diff images")
+    .action(async (baselineTrace: string, candidateTrace: string, options: Record<string, string | boolean>) => {
+      const report = await compareTraceVisuals(baselineTrace, candidateTrace, {
+        outDir: typeof options.out === "string" ? options.out : "reports/visual-diff",
+        threshold: toNumber(options.threshold, 0.1),
+        maxSteps: toNumber(options.maxSteps, Number.MAX_SAFE_INTEGER),
+        writeDiffImages: options.writeDiffs !== false
+      });
+
+      if (Boolean(options.json)) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        console.log(`Baseline: ${report.baselineTracePath}`);
+        console.log(`Candidate: ${report.candidateTracePath}`);
+        console.log(`Compared: ${report.compared}`);
+        console.log(`Different: ${report.different}`);
+        console.log(`Missing screenshots: ${report.missing}`);
+        console.log(`Size mismatches: ${report.sizeMismatches}`);
+      }
+
+      const failRatio = toNumber(options.failRatio, 0.01);
+      const severeDiffs = report.entries.filter((entry) => entry.mismatchRatio > failRatio);
+      if (severeDiffs.length > 0 || report.sizeMismatches > 0 || report.missing > 0) {
+        process.exitCode = 6;
+      }
+    });
+}
+
 function configureFlakeCommand(root: Command): void {
   root
     .command("flake")
@@ -599,6 +666,7 @@ function configureLoadCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (name: string, options: Record<string, string | boolean>) => {
       const rootDir =
