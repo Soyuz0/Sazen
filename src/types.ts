@@ -521,6 +521,7 @@ export interface AgentSessionOptions {
   contextAttachmentsDir?: string;
   maxInterventionsRetained?: number;
   interventionRetentionMode?: "count" | "severity";
+  interventionSourceQuotas?: Record<string, number>;
   maxActionAttempts?: number;
   retryBackoffMs?: number;
   storageStatePath?: string;

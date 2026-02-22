@@ -1734,6 +1734,7 @@ export class AgentSession {
     }
 
     const mode = this.resolveInterventionRetentionMode();
+    const sourceQuotas = this.resolveInterventionSourceQuotas();
 
     if (limit <= 0) {
       while (this.interventionJournal.length > 0) {
@@ -1743,16 +1744,112 @@ export class AgentSession {
     }
 
     while (this.interventionJournal.length > limit) {
-      if (mode === "severity") {
-        const lowImpactIndex = this.interventionJournal.findIndex((entry) => entry.severity === "low");
-        if (lowImpactIndex >= 0) {
-          this.trimInterventionAt(lowImpactIndex);
-          continue;
+      const orderedIndices = this.getInterventionTrimCandidateOrder(mode);
+      let selectedIndex: number | undefined;
+
+      for (const index of orderedIndices) {
+        if (this.canTrimInterventionWithQuotas(index, sourceQuotas)) {
+          selectedIndex = index;
+          break;
         }
       }
 
-      this.trimInterventionAt(0);
+      if (selectedIndex === undefined) {
+        selectedIndex = orderedIndices[0];
+      }
+
+      if (selectedIndex === undefined) {
+        break;
+      }
+
+      this.trimInterventionAt(selectedIndex);
     }
+  }
+
+  private getInterventionTrimCandidateOrder(mode: "count" | "severity"): number[] {
+    if (mode !== "severity") {
+      return this.interventionJournal.map((_, index) => index);
+    }
+
+    const low: number[] = [];
+    const high: number[] = [];
+    for (const [index, entry] of this.interventionJournal.entries()) {
+      if (entry.severity === "low") {
+        low.push(index);
+      } else {
+        high.push(index);
+      }
+    }
+
+    return [...low, ...high];
+  }
+
+  private resolveInterventionSourceQuotas(): Map<string, number> {
+    const quotas = new Map<string, number>();
+    const raw = this.options.interventionSourceQuotas;
+    if (!raw || typeof raw !== "object") {
+      return quotas;
+    }
+
+    for (const [source, value] of Object.entries(raw)) {
+      if (typeof source !== "string") {
+        continue;
+      }
+      const normalizedSource = source.trim();
+      if (normalizedSource.length === 0) {
+        continue;
+      }
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        continue;
+      }
+
+      const normalizedQuota = Math.max(0, Math.floor(value));
+      if (normalizedQuota <= 0) {
+        continue;
+      }
+
+      quotas.set(normalizedSource, normalizedQuota);
+    }
+
+    return quotas;
+  }
+
+  private countInterventionSources(entries: InterventionJournalEntry[]): Map<string, number> {
+    const counts = new Map<string, number>();
+
+    for (const entry of entries) {
+      for (const source of entry.sources) {
+        counts.set(source, (counts.get(source) ?? 0) + 1);
+      }
+    }
+
+    return counts;
+  }
+
+  private canTrimInterventionWithQuotas(index: number, sourceQuotas: Map<string, number>): boolean {
+    if (sourceQuotas.size === 0) {
+      return true;
+    }
+
+    const entry = this.interventionJournal[index];
+    if (!entry) {
+      return false;
+    }
+
+    const counts = this.countInterventionSources(this.interventionJournal);
+    for (const source of entry.sources) {
+      const quota = sourceQuotas.get(source);
+      if (quota === undefined) {
+        continue;
+      }
+
+      const currentCount = counts.get(source) ?? 0;
+      if (currentCount <= quota) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private trimInterventionAt(index: number): void {
@@ -1800,12 +1897,29 @@ export class AgentSession {
     lowImpactRetained: number;
     maxRetained?: number;
     mode: "count" | "severity";
+    sourceQuotas?: Record<string, number>;
+    sourceRetained?: Record<string, number>;
     trimmed: number;
     trimmedHighImpact: number;
     trimmedLowImpact: number;
   } {
     const highImpactRetained = this.interventionJournal.filter((entry) => entry.severity === "high").length;
     const lowImpactRetained = this.interventionJournal.length - highImpactRetained;
+    const sourceQuotasMap = this.resolveInterventionSourceQuotas();
+    const sourceRetainedMap = this.countInterventionSources(this.interventionJournal);
+
+    const sourceQuotas =
+      sourceQuotasMap.size > 0
+        ? Object.fromEntries(
+            [...sourceQuotasMap.entries()].sort(([left], [right]) => left.localeCompare(right))
+          )
+        : undefined;
+    const sourceRetained =
+      sourceRetainedMap.size > 0
+        ? Object.fromEntries(
+            [...sourceRetainedMap.entries()].sort(([left], [right]) => left.localeCompare(right))
+          )
+        : undefined;
 
     return {
       retained: this.interventionJournal.length,
@@ -1813,6 +1927,8 @@ export class AgentSession {
       lowImpactRetained,
       maxRetained: this.resolveInterventionRetentionLimit(),
       mode: this.resolveInterventionRetentionMode(),
+      sourceQuotas,
+      sourceRetained,
       trimmed: this.interventionsTrimmedTotal,
       trimmedHighImpact: this.interventionsTrimmedHigh,
       trimmedLowImpact: this.interventionsTrimmedLow

@@ -865,6 +865,55 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("respects per-source intervention quotas when trimming journal entries", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-source-quota-"));
+    const tracePath = join(tempDir, "trace.json");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir,
+      maxInterventionsRetained: 2,
+      interventionRetentionMode: "count",
+      interventionSourceQuotas: {
+        overlay: 1
+      }
+    });
+
+    const pauseRound = async (source: string) => {
+      session.pauseExecution(source);
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 60);
+      });
+      await session.resumeExecution(source);
+    };
+
+    try {
+      await session.start();
+      await session.perform({ type: "navigate", url: fixture.baseUrl });
+
+      await pauseRound("overlay");
+      await pauseRound("cli");
+      await pauseRound("api");
+
+      const journalState = session.getInterventionJournalState();
+      expect(journalState.retained).toBe(2);
+      expect(journalState.maxRetained).toBe(2);
+      expect(journalState.sourceQuotas?.overlay).toBe(1);
+      expect(journalState.sourceRetained?.overlay).toBe(1);
+
+      await session.saveTrace(tracePath);
+      const raw = await readFile(tracePath, "utf8");
+      const trace = JSON.parse(raw) as SavedTrace;
+      expect((trace.interventions ?? []).length).toBe(2);
+      expect((trace.interventions ?? []).some((entry) => entry.sources.includes("overlay"))).toBe(true);
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("prefers retaining high-impact interventions in severity retention mode", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-severity-"));
     const tracePath = join(tempDir, "trace.json");

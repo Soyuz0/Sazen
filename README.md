@@ -157,6 +157,7 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
     "screenshotMode": "viewport",
     "maxInterventionsRetained": 100,
     "interventionRetentionMode": "severity",
+    "interventionSourceQuotas": { "overlay": 2, "cli": 1 },
     "maxActionAttempts": 3,
     "retryBackoffMs": 150
   },
@@ -319,6 +320,9 @@ Loop scripts support repeated **action -> observe -> branch** execution with opt
 - Retention mode:
   - `count` (default): trim oldest entries first.
   - `severity`: trim low-impact entries first, preserving URL/DOM/storage-changing interventions when possible.
+- Per-source quotas:
+  - `interventionSourceQuotas` (script/adapter) or `--intervention-source-quotas overlay=1,cli=1`
+  - quota-protected sources are preferentially retained when trimming under cap.
 
 ### Browser overlay controls
 - By default, pages include a small top-right runtime panel with `Pause` and `Resume`.
@@ -361,6 +365,7 @@ Common options (available on most execution commands):
 `run`/`loop` additional option:
 - `--max-interventions-retained <n>`
 - `--intervention-retention-mode count|severity`
+- `--intervention-source-quotas <source=n,...>`
 - `--max-action-attempts <n>`
 - `--retry-backoff-ms <n>`
 - `--resume-from-checkpoint <name>`

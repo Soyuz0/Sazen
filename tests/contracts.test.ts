@@ -15,6 +15,10 @@ describe("contracts", () => {
         viewportHeight: 800,
         maxInterventionsRetained: 3,
         interventionRetentionMode: "severity",
+        interventionSourceQuotas: {
+          overlay: 1,
+          cli: 1
+        },
         maxActionAttempts: 3,
         retryBackoffMs: 120
       },
@@ -41,6 +45,7 @@ describe("contracts", () => {
     expect(parsed.settings?.redactionPack).toBe("strict");
     expect(parsed.settings?.maxInterventionsRetained).toBe(3);
     expect(parsed.settings?.interventionRetentionMode).toBe("severity");
+    expect(parsed.settings?.interventionSourceQuotas?.overlay).toBe(1);
     expect(parsed.settings?.maxActionAttempts).toBe(3);
     expect(parsed.settings?.retryBackoffMs).toBe(120);
   });
@@ -54,6 +59,21 @@ describe("contracts", () => {
       parseScript({
         settings: {
           maxActionAttempts: 0
+        },
+        actions: [
+          {
+            type: "snapshot"
+          }
+        ]
+      })
+    ).toThrowError();
+
+    expect(() =>
+      parseScript({
+        settings: {
+          interventionSourceQuotas: {
+            overlay: -1
+          }
         },
         actions: [
           {

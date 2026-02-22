@@ -105,6 +105,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented bounded action auto-retry policy with per-attempt evidence and final retry rationale (`maxActionAttempts`, `retryBackoffMs`).
 - Implemented adapter session identity clarity via explicit `adapterSessionId`/`runtimeSessionId`/`runtimeTabId` response fields.
 - Implemented named checkpoint/resume support for long scripts (`checkpoint` action + `run --resume-from-checkpoint`).
+- Implemented per-source intervention retention quotas (`interventionSourceQuotas` / `--intervention-source-quotas`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -249,7 +250,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Completed:** MCP-parity alias methods (`session.pause|resume|state`) in adapter transport.
 - **Completed:** optional server-side policy for maximum retained intervention journal history.
 - **Completed:** optional severity-based retention tiers (high-impact interventions are retained before low-impact entries under cap).
-- **Next follow-up:** optional per-source retention quotas (for example reserve slots for `overlay` and `cli` interventions during long assisted runs).
+- **Completed:** optional per-source retention quotas (for example reserve slots for `overlay` and `cli` interventions during long assisted runs).
 
 ## Feature Gaps Found During Dogfooding
 - **Resolved:** consent/cookie strategy hooks via region-aware + site/CMP selector layering.

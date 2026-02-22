@@ -184,6 +184,10 @@ function configureRunCommand(root: Command): void {
       "--intervention-retention-mode <mode>",
       "Intervention retention mode: count|severity"
     )
+    .option(
+      "--intervention-source-quotas <spec>",
+      "Per-source intervention quotas (e.g. overlay=1,cli=1)"
+    )
     .option("--max-action-attempts <n>", "Maximum attempts per action before failing")
     .option("--retry-backoff-ms <n>", "Delay between retry attempts in milliseconds")
     .action(async (scriptPath: string, options: Record<string, string | boolean>) => {
@@ -441,6 +445,10 @@ function configureLoopCommand(root: Command): void {
     .option(
       "--intervention-retention-mode <mode>",
       "Intervention retention mode: count|severity"
+    )
+    .option(
+      "--intervention-source-quotas <spec>",
+      "Per-source intervention quotas (e.g. overlay=1,cli=1)"
     )
     .option("--max-action-attempts <n>", "Maximum attempts per action before failing")
     .option("--retry-backoff-ms <n>", "Delay between retry attempts in milliseconds")
@@ -1295,6 +1303,11 @@ function configureRunControlCommand(root: Command): void {
         console.log(
           `- interventionJournal retained=${response.interventionJournal.retained} high=${response.interventionJournal.highImpactRetained} low=${response.interventionJournal.lowImpactRetained} mode=${response.interventionJournal.mode} max=${max}`
         );
+        if (response.interventionJournal.sourceQuotas) {
+          console.log(
+            `- interventionJournal sourceQuotas=${JSON.stringify(response.interventionJournal.sourceQuotas)} retainedBySource=${JSON.stringify(response.interventionJournal.sourceRetained ?? {})}`
+          );
+        }
         console.log(
           `- interventionJournal trimmed=${response.interventionJournal.trimmed} (high=${response.interventionJournal.trimmedHighImpact}, low=${response.interventionJournal.trimmedLowImpact})`
         );
@@ -1329,6 +1342,8 @@ interface RunControlResponse {
     lowImpactRetained: number;
     maxRetained?: number;
     mode: "count" | "severity";
+    sourceQuotas?: Record<string, number>;
+    sourceRetained?: Record<string, number>;
     trimmed: number;
     trimmedHighImpact: number;
     trimmedLowImpact: number;
@@ -1786,6 +1801,7 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
   const redactionPack = parseRedactionPack(options.redactionPack);
   const maxInterventionsRetained = toOptionalNumber(options.maxInterventionsRetained);
   const interventionRetentionMode = parseInterventionRetentionMode(options.interventionRetentionMode);
+  const interventionSourceQuotas = parseInterventionSourceQuotas(options.interventionSourceQuotas);
   const maxActionAttempts = toOptionalNumber(options.maxActionAttempts);
   const retryBackoffMs = toOptionalNumber(options.retryBackoffMs);
 
@@ -1816,6 +1832,10 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
 
   if (interventionRetentionMode) {
     result.interventionRetentionMode = interventionRetentionMode;
+  }
+
+  if (interventionSourceQuotas) {
+    result.interventionSourceQuotas = interventionSourceQuotas;
   }
 
   if (typeof maxActionAttempts === "number" && maxActionAttempts >= 1) {
@@ -1921,6 +1941,50 @@ function parseInterventionRetentionMode(
   }
 
   throw new Error(`Invalid intervention retention mode '${raw}'. Use count or severity.`);
+}
+
+function parseInterventionSourceQuotas(
+  raw: string | boolean | undefined
+): AgentSessionOptions["interventionSourceQuotas"] {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  const quotas: Record<string, number> = {};
+  const segments = raw
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  for (const segment of segments) {
+    const equalsIndex = segment.indexOf("=");
+    if (equalsIndex <= 0 || equalsIndex === segment.length - 1) {
+      throw new Error(
+        `Invalid intervention source quota segment '${segment}'. Use source=count (e.g. overlay=1).`
+      );
+    }
+
+    const source = segment.slice(0, equalsIndex).trim();
+    const valueRaw = segment.slice(equalsIndex + 1).trim();
+    if (source.length === 0) {
+      throw new Error(`Invalid intervention source quota segment '${segment}': missing source name.`);
+    }
+
+    const value = Number(valueRaw);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(
+        `Invalid intervention source quota value '${valueRaw}' for '${source}'. Use non-negative integers.`
+      );
+    }
+
+    quotas[source] = value;
+  }
+
+  if (Object.keys(quotas).length === 0) {
+    return undefined;
+  }
+
+  return quotas;
 }
 
 async function parseActionInput(input: string): Promise<Action | Action[]> {
