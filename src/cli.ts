@@ -15,6 +15,7 @@ import {
   loadDriftHistoryFromFile
 } from "./drift-monitor.js";
 import { renderLiveTimelineTuiFrame, toLiveTimelineEntry, type LiveTimelineEntry } from "./live-timeline.js";
+import { OpenCodeAdapterBridge } from "./opencode-adapter.js";
 import { runLoop } from "./loop.js";
 import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
@@ -53,6 +54,7 @@ configureDriftMonitorCommand(program);
 configureTimelineHtmlCommand(program);
 configureVisualDiffCommand(program);
 configureAdapterStdioCommand(program);
+configureAdapterOpenCodeCommand(program);
 configureRunControlCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
@@ -1288,6 +1290,99 @@ function configureAdapterStdioCommand(root: Command): void {
 
         let task: Promise<void>;
         task = runtime
+          .handleRequest(request)
+          .then((response) => {
+            writeResponse(response);
+          })
+          .catch((error) => {
+            writeResponse({
+              id: request.id,
+              ok: false,
+              error: {
+                message: error instanceof Error ? error.message : String(error)
+              }
+            });
+          })
+          .finally(() => {
+            pending.delete(task);
+          });
+        pending.add(task);
+      }
+
+      await shutdownAdapter();
+    });
+}
+
+function configureAdapterOpenCodeCommand(root: Command): void {
+  root
+    .command("adapter-opencode")
+    .description("Run OpenCode adapter bridge over stdio")
+    .action(async () => {
+      const runtime = new AdapterRuntime();
+      const bridge = new OpenCodeAdapterBridge(runtime);
+      const rl = createInterface({
+        input: process.stdin,
+        crlfDelay: Infinity
+      });
+      const pending = new Set<Promise<void>>();
+      let shutdownPromise: Promise<void> | null = null;
+
+      const writeResponse = (payload: unknown) => {
+        process.stdout.write(`${JSON.stringify(payload)}\n`);
+      };
+
+      const shutdownAdapter = async () => {
+        if (shutdownPromise) {
+          return shutdownPromise;
+        }
+
+        shutdownPromise = (async () => {
+          process.off("SIGINT", onSigInt);
+          process.off("SIGTERM", onSigTerm);
+
+          rl.close();
+          await Promise.allSettled([...pending]);
+          await runtime.shutdown().catch((error) => {
+            if (!isBenignShutdownError(error)) {
+              throw error;
+            }
+          });
+        })();
+
+        return shutdownPromise;
+      };
+
+      const onSigInt = () => {
+        void shutdownAdapter();
+      };
+      const onSigTerm = () => {
+        void shutdownAdapter();
+      };
+
+      process.on("SIGINT", onSigInt);
+      process.on("SIGTERM", onSigTerm);
+
+      for await (const line of rl) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        }
+
+        let request: AdapterRequest;
+        try {
+          request = JSON.parse(trimmed) as AdapterRequest;
+        } catch (error) {
+          writeResponse({
+            ok: false,
+            error: {
+              message: `Invalid JSON request: ${error instanceof Error ? error.message : String(error)}`
+            }
+          });
+          continue;
+        }
+
+        let task: Promise<void>;
+        task = bridge
           .handleRequest(request)
           .then((response) => {
             writeResponse(response);

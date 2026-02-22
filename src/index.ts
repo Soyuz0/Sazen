@@ -16,3 +16,4 @@ export * from "./annotate.js";
 export * from "./adapter.js";
 export * from "./plugin-registry.js";
 export * from "./sdk-contract.js";
+export * from "./opencode-adapter.js";

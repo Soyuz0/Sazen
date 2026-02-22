@@ -111,6 +111,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented consent/login plugin registry core with deterministic plugin ordering (site, CMP, generic) and shared login plugin registration surface.
 - Implemented initial login plugin pack via `handleLogin` action (GitHub-style selectors + generic fallback through registry).
 - Implemented unified SDK contract surface (`src/sdk-contract.ts`) with version handshake via adapter `ping.sdkContractVersion`.
+- Implemented first-class OpenCode adapter bridge (`adapter-opencode`) with `oc.*` alias mapping onto the unified SDK contract methods.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -244,7 +245,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Trace provenance query layer:** answer "why this action" using a searchable action/event graph.
 
 ## Agent-IDE Integration (Planned)
-- **OpenCode integration adapter:** first-class command wrapper and JSON-RPC bridge so OpenCode agents can send actions and receive structured results without parsing CLI text.
+- **Completed: OpenCode integration adapter** via `adapter-opencode` bridge and `oc.*` method aliases.
 - **Claude Code integration adapter:** slash-command oriented bridge and stable output schema for autonomous browser workflows in Claude Code sessions.
 - **OpenAI Codex integration adapter:** lightweight local service exposing action/replay/timeline endpoints with deterministic schema for Codex tool use.
 - **Completed: Unified SDK contract** via `src/sdk-contract.ts` + adapter contract version handshake.

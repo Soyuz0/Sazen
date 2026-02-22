@@ -128,6 +128,7 @@ When `run` or `loop` saves a trace (`--trace`), companion outputs are generated 
 
 ### External agent adapter
 - `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
+- `adapter-opencode`: OpenCode-oriented stdio bridge with `oc.*` method aliases.
 - Methods include session lifecycle, action execution, and run controls (`pauseSession`, `resumeSession`, `getSessionState`).
 - MCP-parity aliases are available (`session.pause`, `session.resume`, `session.state`).
 - Session identity fields are explicit in adapter responses:
@@ -525,4 +526,4 @@ Implemented now:
 - initial login plugin pack via registry-backed `handleLogin`
 
 Planned (tracked in `.plan`):
-- dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio
+- dedicated first-class adapters for Claude Code and OpenAI Codex on top of adapter-stdio
