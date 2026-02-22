@@ -452,6 +452,13 @@ function configureLoopCommand(root: Command): void {
     .option("--save <name>", "Save session on completion")
     .option("--logs", "Print captured events for loop actions", false)
     .option("--max-iterations <n>", "Override script max iterations")
+    .option("--loop-log-every <n>", "Print detailed loop rows every N iterations", "1")
+    .option("--loop-summary-only", "Print compact per-iteration summaries only", false)
+    .option(
+      "--loop-log-branches-only-on-change",
+      "In detailed mode, print branch predicate rows only when branch outcomes change",
+      false
+    )
     .option(
       "--max-interventions-retained <n>",
       "Retain at most this many intervention journal entries"
@@ -471,6 +478,9 @@ function configureLoopCommand(root: Command): void {
       const raw = await readFile(absolutePath, "utf8");
       const script = parseLoopScript(JSON.parse(raw));
       const maxIterationsOverride = toOptionalNumber(options.maxIterations);
+      const loopLogEvery = Math.max(1, toNumber(options.loopLogEvery, 1));
+      const loopSummaryOnly = Boolean(options.loopSummaryOnly);
+      const loopLogBranchesOnlyOnChange = Boolean(options.loopLogBranchesOnlyOnChange);
 
       const session = new AgentSession({
         ...script.settings,
@@ -491,8 +501,25 @@ function configureLoopCommand(root: Command): void {
         console.log(`Loop stop reason: ${report.stopReason}`);
         console.log(`Iterations: ${report.iterations.length}/${report.maxIterations}`);
 
+        let previousBranchSignature: string | undefined;
         for (const iteration of report.iterations) {
+          const shouldPrintDetails =
+            !loopSummaryOnly &&
+            shouldPrintLoopIterationDetails({
+              iteration: iteration.iteration,
+              totalIterations: report.iterations.length,
+              every: loopLogEvery,
+              status: iteration.stepResult.status
+            });
+
+          const summaryLine = formatLoopSummaryLine(iteration);
+          if (!shouldPrintDetails) {
+            console.log(summaryLine);
+            continue;
+          }
+
           console.log(`\nIteration ${iteration.iteration}`);
+          console.log(summaryLine);
           printActionResult(iteration.stepResult, Boolean(options.logs));
 
           if (iteration.observationSnapshot) {
@@ -501,16 +528,26 @@ function configureLoopCommand(root: Command): void {
             );
           }
 
-          for (const branch of iteration.branchResults) {
-            const marker = branch.matched ? "*" : "-";
-            const detail =
-              branch.predicates.length > 0
-                ? branch.predicates
-                    .map((predicate) => `${predicate.passed ? "pass" : "fail"}:${truncate(predicate.detail, 90)}`)
-                    .join(" | ")
-                : "(no predicates)";
-            console.log(`  ${marker} branch ${branch.label} [${branch.matchMode}] ${detail}`);
+          const branchSignature = buildLoopBranchSignature(iteration);
+          const branchChanged = branchSignature !== previousBranchSignature;
+          const shouldPrintBranchRows =
+            !loopLogBranchesOnlyOnChange || branchChanged || iteration.iteration === 1 || report.iterations.length === 1;
+
+          if (shouldPrintBranchRows) {
+            for (const branch of iteration.branchResults) {
+              const marker = branch.matched ? "*" : "-";
+              const detail =
+                branch.predicates.length > 0
+                  ? branch.predicates
+                      .map((predicate) => `${predicate.passed ? "pass" : "fail"}:${truncate(predicate.detail, 90)}`)
+                      .join(" | ")
+                  : "(no predicates)";
+              console.log(`  ${marker} branch ${branch.label} [${branch.matchMode}] ${detail}`);
+            }
+          } else {
+            console.log("  branches: (unchanged)");
           }
+          previousBranchSignature = branchSignature;
 
           if (iteration.selectedBranchLabel) {
             console.log(
@@ -2278,6 +2315,58 @@ function formatTimelineEntry(index: number, result: ActionResult): string {
     pad(diff, 9),
     truncate(result.postSnapshot.url || "(unknown)", 70)
   ].join(" | ");
+}
+
+function shouldPrintLoopIterationDetails(input: {
+  iteration: number;
+  totalIterations: number;
+  every: number;
+  status: ActionResult["status"];
+}): boolean {
+  if (input.iteration === 1 || input.iteration === input.totalIterations) {
+    return true;
+  }
+  if (input.status !== "ok") {
+    return true;
+  }
+  return input.iteration % Math.max(1, input.every) === 0;
+}
+
+function formatLoopSummaryLine(iteration: {
+  iteration: number;
+  stepResult: ActionResult;
+  selectedBranchLabel?: string;
+  selectedBranchNext?: "continue" | "break";
+  selectedBranchActionResults: ActionResult[];
+}): string {
+  return [
+    `iter=${iteration.iteration}`,
+    `step=${iteration.stepResult.status}`,
+    `selected=${iteration.selectedBranchLabel ?? "none"}`,
+    `next=${iteration.selectedBranchNext ?? "continue"}`,
+    `branchActions=${iteration.selectedBranchActionResults.length}`,
+    `durationMs=${iteration.stepResult.durationMs}`
+  ].join(" ");
+}
+
+function buildLoopBranchSignature(iteration: {
+  branchResults: Array<{
+    label: string;
+    matched: boolean;
+    predicates: Array<{
+      passed: boolean;
+      detail: string;
+    }>;
+  }>;
+}): string {
+  return iteration.branchResults
+    .map(
+      (branch) =>
+        `${branch.label}:${branch.matched ? "1" : "0"}:${branch.predicates
+          .map((predicate) => `${predicate.passed ? "1" : "0"}:${predicate.detail}`)
+          .join(",")}`
+    )
+    .join("|");
 }
 
 function toNumber(raw: string | boolean | undefined, fallback: number): number {
