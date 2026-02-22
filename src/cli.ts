@@ -3,7 +3,9 @@
 import { appendFile, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { createInterface } from "node:readline";
 import { Command } from "commander";
+import { AdapterRuntime, type AdapterRequest } from "./adapter.js";
 import { cliActionSchema, parseScript } from "./contracts.js";
 import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
@@ -35,6 +37,7 @@ configureTimelineCommand(program);
 configureBundleCommand(program);
 configureTimelineHtmlCommand(program);
 configureVisualDiffCommand(program);
+configureAdapterStdioCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
@@ -747,6 +750,80 @@ function configureLoadCommand(root: Command): void {
         unsubscribe();
         await session.close();
       }
+    });
+}
+
+function configureAdapterStdioCommand(root: Command): void {
+  root
+    .command("adapter-stdio")
+    .description("Run line-delimited JSON adapter server over stdio")
+    .action(async () => {
+      const runtime = new AdapterRuntime();
+      const rl = createInterface({
+        input: process.stdin,
+        crlfDelay: Infinity
+      });
+      const pending = new Set<Promise<void>>();
+
+      const writeResponse = (payload: unknown) => {
+        process.stdout.write(`${JSON.stringify(payload)}\n`);
+      };
+
+      const onExit = async () => {
+        rl.close();
+        await Promise.allSettled([...pending]);
+        await runtime.shutdown();
+      };
+
+      process.once("SIGINT", () => {
+        void onExit();
+      });
+      process.once("SIGTERM", () => {
+        void onExit();
+      });
+
+      for await (const line of rl) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        }
+
+        let request: AdapterRequest;
+        try {
+          request = JSON.parse(trimmed) as AdapterRequest;
+        } catch (error) {
+          writeResponse({
+            ok: false,
+            error: {
+              message: `Invalid JSON request: ${error instanceof Error ? error.message : String(error)}`
+            }
+          });
+          continue;
+        }
+
+        let task: Promise<void>;
+        task = runtime
+          .handleRequest(request)
+          .then((response) => {
+            writeResponse(response);
+          })
+          .catch((error) => {
+            writeResponse({
+              id: request.id,
+              ok: false,
+              error: {
+                message: error instanceof Error ? error.message : String(error)
+              }
+            });
+          })
+          .finally(() => {
+            pending.delete(task);
+          });
+        pending.add(task);
+      }
+
+      await Promise.allSettled([...pending]);
+      await runtime.shutdown();
     });
 }
 

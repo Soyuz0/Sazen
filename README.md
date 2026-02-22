@@ -103,6 +103,10 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 - `bundle <trace>`: triage bundle (trace + manifest + artifacts refs).
 - `visual-diff <baselineTrace> <candidateTrace>`: screenshot diff overlays.
 
+### External agent adapter
+- `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
+- Methods include session lifecycle, action execution, and run controls (`pauseSession`, `resumeSession`, `getSessionState`).
+
 ### Batch validation
 - `npm run smoke:sites`: cross-site smoke matrix runner.
 
@@ -223,6 +227,28 @@ Common options (available on most execution commands):
 2. Inspect unstable actions.
 3. Re-run with `stability-profile chatty` and compare.
 
+### Integrating from another agent runtime
+1. Start adapter server:
+
+```bash
+npm run dev -- adapter-stdio
+```
+
+2. Send JSON requests line-by-line on stdin:
+
+```json
+{"id":1,"method":"ping"}
+{"id":2,"method":"createSession","params":{"options":{"headed":false,"deterministic":true}}}
+{"id":3,"method":"performAction","params":{"sessionId":"<session-id>","action":{"type":"navigate","url":"http://localhost:3000"}}}
+{"id":4,"method":"describe","params":{"sessionId":"<session-id>","maxElements":80}}
+{"id":5,"method":"pauseSession","params":{"sessionId":"<session-id>"}}
+{"id":6,"method":"getSessionState","params":{"sessionId":"<session-id>"}}
+{"id":7,"method":"resumeSession","params":{"sessionId":"<session-id>"}}
+{"id":8,"method":"closeSession","params":{"sessionId":"<session-id>"}}
+```
+
+3. Read line-delimited JSON responses (`ok`, `result`, `error`); responses may arrive out of order, so correlate by `id`.
+
 ---
 
 ## Examples
@@ -255,7 +281,7 @@ Implemented now:
 - annotated per-action screenshots
 
 Planned (tracked in `.plan`):
-- live timeline pane during active execution (not only post-run report)
-- element-aware visual diff labels/boxes
-- pause/resume with intervention journaling
-- first-class integrations for OpenCode, Claude Code, OpenAI Codex
+- richer live timeline pane UI during execution (current live stream is row/JSONL based)
+- element-aware visual diff labels/semantic tags on diff outputs
+- richer run-level intervention journaling (adapter pause/resume control is implemented)
+- dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

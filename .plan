@@ -81,6 +81,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented element-aware screenshot annotations for executed actions (target box + center marker).
 - Implemented live timeline output during `run` (`--live-timeline`) and JSONL timeline streaming (`--timeline-stream`).
 - Implemented pause action (`pause`) with timeout/enter modes and intervention summary metadata.
+- Implemented adapter runtime run controls: `pauseSession` / `resumeSession` / `getSessionState` with serialized session operations.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -158,9 +159,9 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Unified SDK contract:** one shared TypeScript/JSON schema for all three integrations to avoid per-agent drift.
 
 ## Pause/Resume Runtime (Planned)
-- **Run-level pause/resume controls:** explicit external pause/resume commands while a long run is active (beyond per-action pause).
 - **Intervention journal:** richer capture of what changed during pause (URL, major DOM diffs, storage deltas where available).
 - **Run provenance markers:** timeline entries indicating pause start/end and subsequent agent reconciliation steps.
+- **CLI-exposed run control surface:** direct pause/resume controls for long local `run` executions, aligned with adapter semantics.
 
 ## Feature Gaps Found During Dogfooding
 - **Consent/cookie strategy hooks:** extend generic accept/reject logic with site-specific adapters and region-aware variants.
