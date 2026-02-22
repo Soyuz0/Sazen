@@ -1,5 +1,10 @@
 import type { Action, SavedTrace, SelectorHealthReport, SelectorHealthTopTarget, TraceRecord } from "./types.js";
 
+export interface SelectorHealthRates {
+  fallbackRate: number;
+  ambiguityRate: number;
+}
+
 interface MutableTargetStats {
   total: number;
   failures: number;
@@ -144,6 +149,21 @@ export function formatSelectorHealthSummary(report: SelectorHealthReport): strin
   }
 
   return lines;
+}
+
+export function computeSelectorHealthRates(report: SelectorHealthReport): SelectorHealthRates {
+  const total = Math.max(0, report.totals.selectorActions);
+  if (total === 0) {
+    return {
+      fallbackRate: 0,
+      ambiguityRate: 0
+    };
+  }
+
+  return {
+    fallbackRate: round(report.totals.fallbackUsed / total, 4),
+    ambiguityRate: round(report.totals.ambiguous / total, 4)
+  };
 }
 
 function isSelectorAction(action: Action): boolean {

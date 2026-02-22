@@ -24,7 +24,11 @@ import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
 import { buildRunArtifactIndex } from "./run-index.js";
 import { SDK_CONTRACT_VERSION } from "./sdk-contract.js";
-import { buildSelectorHealthReport, formatSelectorHealthSummary } from "./selector-health.js";
+import {
+  buildSelectorHealthReport,
+  computeSelectorHealthRates,
+  formatSelectorHealthSummary
+} from "./selector-health.js";
 import { AgentSession } from "./session.js";
 import { createAgentPageDescription, tokenOptimizedSnapshot } from "./snapshot.js";
 import { writeTimelineHtmlReport } from "./timeline-html.js";
@@ -1035,10 +1039,13 @@ function configureSelectorHealthCommand(root: Command): void {
     .description("Analyze selector fragility metrics for a trace")
     .argument("<tracePath>", "Path to trace JSON")
     .option("--out <path>", "Output file or directory", "reports/selector-health")
+    .option("--max-ambiguity-rate <n>", "Fail when ambiguity rate exceeds threshold (0..1)")
+    .option("--max-fallback-rate <n>", "Fail when fallback usage rate exceeds threshold (0..1)")
     .option("--json", "Print JSON to stdout", false)
     .action(async (tracePath: string, options: Record<string, string | boolean>) => {
       const loaded = await loadSavedTrace(tracePath);
       const report = buildSelectorHealthReport(loaded.trace, loaded.absolutePath);
+      const rates = computeSelectorHealthRates(report);
 
       if (Boolean(options.json)) {
         console.log(JSON.stringify(report, null, 2));
@@ -1052,6 +1059,33 @@ function configureSelectorHealthCommand(root: Command): void {
       console.log(`Selector health: ${outPath}`);
       for (const line of formatSelectorHealthSummary(report)) {
         console.log(`- ${line}`);
+      }
+
+      console.log(
+        `- rates fallback=${rates.fallbackRate.toFixed(4)} ambiguity=${rates.ambiguityRate.toFixed(4)}`
+      );
+
+      const maxAmbiguityRate = parseOptionalRateThreshold(options.maxAmbiguityRate, "max-ambiguity-rate");
+      const maxFallbackRate = parseOptionalRateThreshold(options.maxFallbackRate, "max-fallback-rate");
+      const gatingFailures: string[] = [];
+
+      if (typeof maxAmbiguityRate === "number" && rates.ambiguityRate > maxAmbiguityRate) {
+        gatingFailures.push(
+          `ambiguityRate=${rates.ambiguityRate.toFixed(4)} exceeded max=${maxAmbiguityRate.toFixed(4)}`
+        );
+      }
+
+      if (typeof maxFallbackRate === "number" && rates.fallbackRate > maxFallbackRate) {
+        gatingFailures.push(
+          `fallbackRate=${rates.fallbackRate.toFixed(4)} exceeded max=${maxFallbackRate.toFixed(4)}`
+        );
+      }
+
+      if (gatingFailures.length > 0) {
+        for (const failure of gatingFailures) {
+          console.log(`- gate fail: ${failure}`);
+        }
+        process.exitCode = 7;
       }
     });
 }
@@ -2316,6 +2350,19 @@ function parseInterventionSourceQuotas(
   }
 
   return quotas;
+}
+
+function parseOptionalRateThreshold(raw: string | boolean | undefined, flagName: string): number | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`Invalid --${flagName} '${raw}'. Use a number between 0 and 1.`);
+  }
+
+  return value;
 }
 
 async function parseActionInput(input: string): Promise<Action | Action[]> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSelectorHealthReport } from "../src/selector-health.js";
+import { buildSelectorHealthReport, computeSelectorHealthRates } from "../src/selector-health.js";
 import type { SavedTrace } from "../src/types.js";
 
 describe("selector health", () => {
@@ -96,5 +96,32 @@ describe("selector health", () => {
     expect(report.fallbackDepth.histogram["0"]).toBe(1);
     expect(report.fallbackDepth.histogram["2"]).toBe(1);
     expect(report.topTargets.some((entry) => entry.target === "css:#primary" && entry.total === 2)).toBe(true);
+
+    const rates = computeSelectorHealthRates(report);
+    expect(rates.fallbackRate).toBe(0.25);
+    expect(rates.ambiguityRate).toBe(0.5);
+  });
+
+  it("returns zero rates when there are no selector actions", () => {
+    const report = {
+      createdAt: new Date().toISOString(),
+      totals: {
+        selectorActions: 0,
+        fallbackUsed: 0,
+        ambiguous: 0,
+        failures: 0,
+        timeoutFailures: 0
+      },
+      fallbackDepth: {
+        average: 0,
+        max: 0,
+        histogram: {}
+      },
+      topTargets: []
+    };
+
+    const rates = computeSelectorHealthRates(report);
+    expect(rates.fallbackRate).toBe(0);
+    expect(rates.ambiguityRate).toBe(0);
   });
 });
