@@ -726,6 +726,23 @@ describe("agent session integration", () => {
 
       const streamRaw = await readFile(join(contextDir, "attachments.jsonl"), "utf8");
       expect(streamRaw.trim().length).toBeGreaterThan(0);
+
+      const indexRaw = await readFile(join(contextDir, "context-index.json"), "utf8");
+      const index = JSON.parse(indexRaw) as {
+        version: number;
+        entryCount: number;
+        entries: Array<{
+          actionId: string;
+          latestPath: string;
+          runId: string;
+        }>;
+      };
+      expect(index.version).toBe(1);
+      expect(index.entryCount).toBeGreaterThanOrEqual(1);
+      expect(index.entries.length).toBe(index.entryCount);
+      expect(index.entries[0]?.actionId).toBe(nav.actionId);
+      expect(index.entries[0]?.latestPath).toBe(manifest.latestPath);
+      expect(index.entries[0]?.runId).toBe(nav.sessionId);
     } finally {
       await session.close();
       await rm(tempDir, { recursive: true, force: true });

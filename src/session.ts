@@ -115,6 +115,8 @@ interface SessionStorageSnapshot {
   localStorage: Map<string, string>;
 }
 
+const CONTEXT_INDEX_MAX_ENTRIES = 500;
+
 export class AgentSession {
   readonly sessionId = randomUUID();
   readonly tabId = "tab_1";
@@ -1857,6 +1859,7 @@ export class AgentSession {
     const archivePath = join(rootDir, `${timestamp}-${result.actionId}.${extension}`);
     const manifestPath = join(rootDir, "latest.json");
     const streamPath = join(rootDir, "attachments.jsonl");
+    const indexPath = join(rootDir, "context-index.json");
 
     await copyFile(preferredPath, latestPath);
     await copyFile(preferredPath, archivePath);
@@ -1876,6 +1879,40 @@ export class AgentSession {
 
     await writeFile(manifestPath, JSON.stringify(payload, null, 2), "utf8");
     await appendFile(streamPath, `${JSON.stringify(payload)}\n`, "utf8");
+
+    const currentIndex = await readFile(indexPath, "utf8")
+      .then((raw) => {
+        const parsed = JSON.parse(raw) as {
+          version?: unknown;
+          updatedAt?: unknown;
+          entries?: unknown;
+        };
+        return Array.isArray(parsed.entries) ? parsed.entries : [];
+      })
+      .catch(() => []);
+
+    const nextEntries = [
+      ...currentIndex,
+      {
+        ...payload,
+        runId: this.sessionId
+      }
+    ].slice(-CONTEXT_INDEX_MAX_ENTRIES);
+
+    await writeFile(
+      indexPath,
+      JSON.stringify(
+        {
+          version: 1,
+          updatedAt: payload.attachedAt,
+          entryCount: nextEntries.length,
+          entries: nextEntries
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
   }
 
   private applyInterventionRetentionPolicy(): void {
