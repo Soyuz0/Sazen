@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { appendFile, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { Command } from "commander";
 import { cliActionSchema, parseScript } from "./contracts.js";
@@ -151,6 +151,12 @@ function configureRunCommand(root: Command): void {
         ...toSessionOptions(options)
       });
 
+      if (typeof options.timelineStream === "string" && options.timelineStream.length > 0) {
+        const streamPath = resolve(options.timelineStream);
+        await mkdir(dirname(streamPath), { recursive: true });
+        await writeFile(streamPath, "", "utf8");
+      }
+
       await session.start();
 
       let failedActions = 0;
@@ -158,6 +164,9 @@ function configureRunCommand(root: Command): void {
       try {
         for (const [index, action] of script.actions.entries()) {
           console.log(`\nAction ${index + 1}/${script.actions.length}: ${action.type}`);
+          if (action.type === "pause" && (action.mode ?? "enter") === "enter") {
+            console.log("Pause action active: press Enter to resume (or wait for timeout).");
+          }
           const result = await session.perform(action as Action);
           printActionResult(result, Boolean(options.logs));
 
@@ -874,6 +883,12 @@ function printActionResult(result: ActionResult, printEvents: boolean): void {
 
   if (result.annotatedScreenshotPath) {
     console.log(`annotated: ${result.annotatedScreenshotPath}`);
+  }
+
+  if (result.pauseSummary) {
+    console.log(
+      `pause: mode=${result.pauseSummary.mode} elapsed=${result.pauseSummary.elapsedMs}ms urlChanged=${result.pauseSummary.urlChanged} domChanged=${result.pauseSummary.domChanged}`
+    );
   }
 
   if (printEvents) {

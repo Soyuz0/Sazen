@@ -97,6 +97,11 @@ const actionSchemaCore = z.discriminatedUnion("type", [
     key: z.string().min(1)
   }),
   actionBaseSchema.extend({
+    type: z.literal("pause"),
+    mode: z.enum(["enter", "timeout"]).optional(),
+    note: z.string().optional()
+  }),
+  actionBaseSchema.extend({
     type: z.literal("assert"),
     condition: assertConditionSchema
   }),

@@ -66,6 +66,7 @@ These rules define how autonomous agents should operate when using this browser 
 - Avoid unrelated edits.
 - Do not rewrite history unless explicitly requested.
 - After a successful testing run, commit all intended changes so the validated state is preserved.
+- When a remote is configured, push each completed feature commit after validation.
 
 ## 11) Mandatory Testing
 - Every implementation change must ship with automated tests where practical (unit, integration, or both).

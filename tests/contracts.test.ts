@@ -110,5 +110,13 @@ describe("contracts", () => {
       }
     });
     expect(overlapAssert.type).toBe("assert");
+
+    const pauseAction = parseAction({
+      type: "pause",
+      mode: "timeout",
+      timeoutMs: 200,
+      note: "manual-check"
+    });
+    expect(pauseAction.type).toBe("pause");
   });
 });

@@ -310,4 +310,35 @@ describe("agent session integration", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it("supports pause action and captures intervention summary", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-pause-"));
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      await session.perform({ type: "navigate", url: fixture.baseUrl });
+
+      const paused = await session.perform({
+        type: "pause",
+        mode: "timeout",
+        timeoutMs: 200,
+        note: "manual review"
+      });
+
+      expect(paused.status).toBe("ok");
+      expect(paused.pauseSummary?.mode).toBe("timeout");
+      expect((paused.pauseSummary?.elapsedMs ?? 0) >= 180).toBe(true);
+      expect(paused.pauseSummary?.urlChanged).toBe(false);
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

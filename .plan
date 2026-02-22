@@ -80,6 +80,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented screenshot-based visual regression overlays (`visual-diff`).
 - Implemented element-aware screenshot annotations for executed actions (target box + center marker).
 - Implemented live timeline output during `run` (`--live-timeline`) and JSONL timeline streaming (`--timeline-stream`).
+- Implemented pause action (`pause`) with timeout/enter modes and intervention summary metadata.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -119,6 +120,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added profile command wrappers to simplify session save/load workflows for role-based testing.
 - Added CLI-level visual diff thresholding and fail conditions for regression gating.
 - Added annotated screenshot artifacts in action results and timeline entries.
+- Added pause action coverage in integration tests and action result metadata.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -156,9 +158,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Unified SDK contract:** one shared TypeScript/JSON schema for all three integrations to avoid per-agent drift.
 
 ## Pause/Resume Runtime (Planned)
-- **Execution pause control:** explicit pause/resume commands while an agent run is active.
-- **Intervention journal:** capture how long execution was paused and a post-resume snapshot diff.
-- **User-intervention detection:** when resumed, detect and record key user changes made during pause (URL, major DOM diffs, storage deltas where available).
+- **Run-level pause/resume controls:** explicit external pause/resume commands while a long run is active (beyond per-action pause).
+- **Intervention journal:** richer capture of what changed during pause (URL, major DOM diffs, storage deltas where available).
 - **Run provenance markers:** timeline entries indicating pause start/end and subsequent agent reconciliation steps.
 
 ## Feature Gaps Found During Dogfooding

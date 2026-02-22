@@ -166,6 +166,13 @@ export interface PressAction {
   timeoutMs?: number;
 }
 
+export interface PauseAction {
+  type: "pause";
+  mode?: "enter" | "timeout";
+  timeoutMs?: number;
+  note?: string;
+}
+
 export type AssertCondition =
   | {
       kind: "selector";
@@ -257,6 +264,7 @@ export type Action =
   | FillAction
   | SelectAction
   | PressAction
+  | PauseAction
   | AssertAction
   | HandleConsentAction
   | WaitForAction
@@ -282,6 +290,13 @@ export interface ActionResult {
   annotatedScreenshotPath?: string;
   resolvedNodeId?: string;
   resolvedBoundingBox?: BoundingBox;
+  pauseSummary?: {
+    mode: "enter" | "timeout";
+    note?: string;
+    elapsedMs: number;
+    urlChanged: boolean;
+    domChanged: boolean;
+  };
   error?: {
     message: string;
     stack?: string;

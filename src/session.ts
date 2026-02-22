@@ -153,12 +153,14 @@ export class AgentSession {
     let status: ActionResult["status"] = "ok";
     let resolvedNodeId: string | undefined;
     let resolvedBoundingBox: BoundingBox | undefined;
+    let pauseElapsedMs: number | undefined;
     let error: ActionResult["error"] | undefined;
 
     try {
       const execution = await this.executeAction(action, preSnapshot);
       resolvedNodeId = execution.resolvedNodeId;
       resolvedBoundingBox = execution.resolvedBoundingBox;
+      pauseElapsedMs = execution.pauseElapsedMs;
       await this.waitForStability(action, getActionTimeout(action));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
@@ -239,6 +241,16 @@ export class AgentSession {
       annotatedScreenshotPath,
       resolvedNodeId,
       resolvedBoundingBox,
+      pauseSummary:
+        action.type === "pause"
+          ? {
+              mode: action.mode ?? "enter",
+              note: action.note,
+              elapsedMs: pauseElapsedMs ?? finishedAt - startedAt,
+              urlChanged: preSnapshot.url !== postSnapshot.url,
+              domChanged: postSnapshot.domHash !== preSnapshot.domHash
+            }
+          : undefined,
       error
     };
 
@@ -361,7 +373,7 @@ export class AgentSession {
   private async executeAction(
     action: Action,
     preSnapshot: DomSnapshot
-  ): Promise<{ resolvedNodeId?: string; resolvedBoundingBox?: BoundingBox }> {
+  ): Promise<{ resolvedNodeId?: string; resolvedBoundingBox?: BoundingBox; pauseElapsedMs?: number }> {
     const page = this.requirePage();
 
     switch (action.type) {
@@ -424,6 +436,13 @@ export class AgentSession {
       case "press": {
         await page.keyboard.press(action.key);
         return {};
+      }
+
+      case "pause": {
+        const elapsedMs = await this.runPauseAction(action);
+        return {
+          pauseElapsedMs: elapsedMs
+        };
       }
 
       case "assert": {
@@ -807,6 +826,20 @@ export class AgentSession {
     }
   }
 
+  private async runPauseAction(action: Extract<Action, { type: "pause" }>): Promise<number> {
+    const mode = action.mode ?? "enter";
+    const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
+    const startedAt = Date.now();
+
+    if (mode === "timeout") {
+      await this.requirePage().waitForTimeout(timeout);
+      return Date.now() - startedAt;
+    }
+
+    await waitForEnterOrTimeout(timeout);
+    return Date.now() - startedAt;
+  }
+
   private async runWaitCondition(condition: WaitCondition, timeoutMs?: number): Promise<void> {
     const page = this.requirePage();
     const timeout = timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
@@ -1146,4 +1179,42 @@ function extractSelectorInvariant(action: Action): string | undefined {
   }
 
   return undefined;
+}
+
+async function waitForEnterOrTimeout(timeoutMs: number): Promise<void> {
+  if (!process.stdin.isTTY) {
+    await new Promise<void>((resolvePromise) => {
+      setTimeout(resolvePromise, timeoutMs);
+    });
+    return;
+  }
+
+  await new Promise<void>((resolvePromise) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      cleanup();
+      resolvePromise();
+    }, timeoutMs);
+
+    const onData = (chunk: Buffer) => {
+      const value = chunk.toString("utf8");
+      if (value.includes("\n") || value.includes("\r")) {
+        cleanup();
+        resolvePromise();
+      }
+    };
+
+    const cleanup = () => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      process.stdin.off("data", onData);
+      process.stdin.pause();
+    };
+
+    process.stdin.resume();
+    process.stdin.on("data", onData);
+  });
 }

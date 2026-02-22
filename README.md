@@ -19,6 +19,9 @@ npm run dev -- run examples/sample-flow.json --headless --trace traces/sample-tr
 # stream live timeline rows while run executes
 npm run dev -- run examples/sample-flow.json --headless --live-timeline --timeline-stream reports/runtime-logs/live.jsonl
 
+# pause during a script step (timeout mode example inside script)
+# { "type": "pause", "mode": "timeout", "timeoutMs": 5000, "note": "manual review" }
+
 # replay, inspect timeline, and build triage bundle
 npm run dev -- replay traces/sample-trace.json --mode relaxed
 npm run dev -- timeline traces/sample-trace.json --artifacts
@@ -138,6 +141,13 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
 - `selector_overlap_max` (max overlap ratio between two selectors)
 - `url_contains`
 - `title_contains`
+
+### Pause action
+- `pause` lets the run pause for manual review and then resume.
+- Modes:
+  - `timeout`: resume after `timeoutMs`
+  - `enter`: wait for Enter (or timeout fallback)
+- Result metadata includes `pauseSummary` with elapsed time and whether URL/DOM changed during pause.
 
 ### Consent helper
 
