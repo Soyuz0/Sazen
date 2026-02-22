@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import process from "node:process";
 import { parseScript } from "./contracts.js";
+import { appendMatrixSummaryToDriftHistory } from "./drift-monitor.js";
 import { buildSelectorHealthReport } from "./selector-health.js";
 import { AgentSession } from "./session.js";
 import { loadSavedTrace } from "./trace.js";
@@ -204,8 +205,16 @@ async function main(): Promise<void> {
   const summaryPath = resolve("reports/site-matrix-summary.json");
   await writeFile(summaryPath, JSON.stringify(matrixSummary, null, 2), "utf8");
 
+  const drift = await appendMatrixSummaryToDriftHistory({
+    matrixSummaryPath: summaryPath,
+    historyPath: resolve("reports/drift-monitor/history.json"),
+    aggregatePath: resolve("reports/drift-monitor/aggregate.json")
+  });
+
   console.log(`\nCompleted ${summaries.length} site flows; failed sites: ${failedSites}`);
   console.log(`Summary: ${summaryPath}`);
+  console.log(`Drift history: ${drift.historyPath}`);
+  console.log(`Drift aggregate: ${drift.aggregatePath}`);
 
   if (failedSites > 0) {
     process.exitCode = 2;

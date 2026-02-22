@@ -126,6 +126,10 @@ For non-trivial runtime changes:
 npm run smoke:sites -- --operation-timeout-ms 60000 --action-timeout-ms 30000 --stability-profile balanced
 ```
 
+Smoke runs append drift-monitor outputs:
+- `reports/drift-monitor/history.json`
+- `reports/drift-monitor/aggregate.json`
+
 ## Done Criteria
 
 - build + tests pass

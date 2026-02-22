@@ -9,6 +9,7 @@ export * from "./selector-health.js";
 export * from "./run-index.js";
 export * from "./replay.js";
 export * from "./trace.js";
+export * from "./drift-monitor.js";
 export * from "./timeline-html.js";
 export * from "./visual.js";
 export * from "./annotate.js";

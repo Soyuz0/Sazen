@@ -140,6 +140,7 @@ When `run` or `loop` saves a trace (`--trace`), companion outputs are generated 
 
 ### Batch validation
 - `npm run smoke:sites`: cross-site smoke matrix runner.
+- Smoke runs also append drift-monitor history and aggregate outputs under `reports/drift-monitor/`.
 
 ---
 
@@ -395,6 +396,8 @@ Common options (available on most execution commands):
 - `reports/runtime-logs/`: command logs.
 - `reports/runtime-logs/*.jsonl`: optional live timeline streams from `run --timeline-stream`.
 - `reports/site-matrix-summary.json`: matrix summary.
+- `reports/drift-monitor/history.json`: accumulated cross-run drift history.
+- `reports/drift-monitor/aggregate.json`: recurring failure signature + site failure-rate aggregate.
 - `reports/timeline-html/`: timeline HTML reports.
 - `reports/visual-diff/`: visual diff images/reports.
 - `reports/triage-bundles/`: packaged triage outputs.
