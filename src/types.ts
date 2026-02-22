@@ -435,6 +435,7 @@ export interface AgentSessionOptions {
   artifactsDir?: string;
   contextAttachments?: boolean;
   contextAttachmentsDir?: string;
+  maxInterventionsRetained?: number;
   storageStatePath?: string;
   logRedactionPatterns?: RegExp[];
   logNoiseFiltering?: boolean;

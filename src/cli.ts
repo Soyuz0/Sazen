@@ -151,6 +151,10 @@ function configureRunCommand(root: Command): void {
     .option("--live-timeline-mode <mode>", "Live timeline mode: row|tui", "row")
     .option("--timeline-stream <path>", "Write live timeline JSONL stream to file")
     .option("--control-socket <path>", "Enable run control socket at this path")
+    .option(
+      "--max-interventions-retained <n>",
+      "Retain at most this many intervention journal entries"
+    )
     .action(async (scriptPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(scriptPath);
       const raw = await readFile(absolutePath, "utf8");
@@ -322,6 +326,10 @@ function configureLoopCommand(root: Command): void {
     .option("--save <name>", "Save session on completion")
     .option("--logs", "Print captured events for loop actions", false)
     .option("--max-iterations <n>", "Override script max iterations")
+    .option(
+      "--max-interventions-retained <n>",
+      "Retain at most this many intervention journal entries"
+    )
     .action(async (loopPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(loopPath);
       const raw = await readFile(absolutePath, "utf8");
@@ -1082,6 +1090,13 @@ function configureRunControlCommand(root: Command): void {
           console.log(`- hints: ${response.latestIntervention.reconciliationHints?.join(" | ")}`);
         }
       }
+      if (response.interventionJournal) {
+        const max =
+          typeof response.interventionJournal.maxRetained === "number"
+            ? String(response.interventionJournal.maxRetained)
+            : "unbounded";
+        console.log(`- interventionJournal retained=${response.interventionJournal.retained} max=${max}`);
+      }
     });
 }
 
@@ -1104,6 +1119,10 @@ interface RunControlResponse {
   command: "pause" | "resume" | "state";
   state?: RunControlState;
   run?: RunControlRunState;
+  interventionJournal?: {
+    retained: number;
+    maxRetained?: number;
+  };
   latestIntervention?: {
     elapsedMs: number;
     urlChanged: boolean;
@@ -1239,6 +1258,7 @@ async function handleRunControlCommand(
       command,
       state,
       run: getRunState(),
+      interventionJournal: session.getInterventionJournalState(),
       latestIntervention: toRunControlIntervention(session.getLatestIntervention())
     };
   }
@@ -1250,6 +1270,7 @@ async function handleRunControlCommand(
       command,
       state,
       run: getRunState(),
+      interventionJournal: session.getInterventionJournalState(),
       latestIntervention: toRunControlIntervention(session.getLatestIntervention())
     };
   }
@@ -1259,6 +1280,7 @@ async function handleRunControlCommand(
     command,
     state: session.getExecutionControlState(),
     run: getRunState(),
+    interventionJournal: session.getInterventionJournalState(),
     latestIntervention: toRunControlIntervention(session.getLatestIntervention())
   };
 }
@@ -1383,6 +1405,7 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
   const stabilityProfile = parseStabilityProfile(options.stabilityProfile);
   const screenshotMode = parseScreenshotMode(options.screenshotMode);
   const redactionPack = parseRedactionPack(options.redactionPack);
+  const maxInterventionsRetained = toOptionalNumber(options.maxInterventionsRetained);
 
   const result: AgentSessionOptions = {
     viewportWidth: viewport?.width,
@@ -1403,6 +1426,10 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
 
   if (options.rawLogs === true) {
     result.logNoiseFiltering = false;
+  }
+
+  if (typeof maxInterventionsRetained === "number" && maxInterventionsRetained >= 0) {
+    result.maxInterventionsRetained = Math.floor(maxInterventionsRetained);
   }
 
   if (isFlagPresent("--no-annotate-screenshots")) {

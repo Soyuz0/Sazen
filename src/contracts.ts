@@ -184,6 +184,7 @@ export const scriptSchema = z.object({
       artifactsDir: z.string().optional(),
       contextAttachments: z.boolean().optional(),
       contextAttachmentsDir: z.string().optional(),
+      maxInterventionsRetained: z.number().int().nonnegative().optional(),
       storageStatePath: z.string().optional(),
       logNoiseFiltering: z.boolean().optional()
     })

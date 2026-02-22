@@ -97,6 +97,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented visual baseline assert condition (`assert` + `visual_baseline`) with mismatch thresholding and diff artifacts.
 - Implemented live timeline TUI mode for `run` (`--live-timeline --live-timeline-mode tui`) with auto-refresh rows and recent artifact/error panes.
 - Implemented timeline HTML filter presets and diff-only focus mode for long traces.
+- Implemented configurable intervention journal retention policy (`maxInterventionsRetained` / `--max-interventions-retained`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -149,6 +150,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added integration coverage for pass/fail visual baseline assertions within regular action scripts.
 - Added unit coverage for live timeline TUI frame rendering and action-result row mapping.
 - Added unit coverage for timeline HTML preset/diff-only control rendering.
+- Added integration coverage for intervention retention policy in session and adapter state flows.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -236,7 +238,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Completed:** storage/cookie delta journaling with bounded diff samples.
 - **Completed:** reconciliation hints attached when URL/DOM/storage drift occurs during pause.
 - **Completed:** MCP-parity alias methods (`session.pause|resume|state`) in adapter transport.
-- **Next follow-up:** add optional server-side policy for maximum retained intervention journal history.
+- **Completed:** optional server-side policy for maximum retained intervention journal history.
+- **Next follow-up:** optional severity-based retention tiers (for example keep all URL/DOM-changing interventions while trimming low-impact entries).
 
 ## Feature Gaps Found During Dogfooding
 - **Resolved:** consent/cookie strategy hooks via region-aware + site/CMP selector layering.

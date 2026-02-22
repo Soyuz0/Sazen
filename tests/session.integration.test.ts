@@ -606,6 +606,50 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("enforces max retained intervention journal entries when configured", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-intervention-retention-"));
+    const tracePath = join(tempDir, "trace.json");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir,
+      maxInterventionsRetained: 1
+    });
+
+    try {
+      await session.start();
+      await session.perform({ type: "navigate", url: fixture.baseUrl });
+
+      session.pauseExecution("first");
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 60);
+      });
+      await session.resumeExecution("first");
+
+      session.pauseExecution("second");
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 60);
+      });
+      await session.resumeExecution("second");
+
+      const journalState = session.getInterventionJournalState();
+      expect(journalState.retained).toBe(1);
+      expect(journalState.maxRetained).toBe(1);
+      expect(session.getLatestIntervention()?.sources).toContain("second");
+
+      await session.saveTrace(tracePath);
+      const raw = await readFile(tracePath, "utf8");
+      const trace = JSON.parse(raw) as SavedTrace;
+      expect((trace.interventions ?? []).length).toBe(1);
+      expect((trace.interventions ?? [])[0].sources).toContain("second");
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("closes sessions idempotently across repeated calls", async () => {
     const session = new AgentSession({
       headed: false,

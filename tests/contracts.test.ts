@@ -12,7 +12,8 @@ describe("contracts", () => {
         annotateScreenshots: false,
         redactionPack: "strict",
         viewportWidth: 1280,
-        viewportHeight: 800
+        viewportHeight: 800,
+        maxInterventionsRetained: 3
       },
       actions: [
         {
@@ -35,6 +36,7 @@ describe("contracts", () => {
     expect(parsed.settings?.screenshotMode).toBe("fullpage");
     expect(parsed.settings?.annotateScreenshots).toBe(false);
     expect(parsed.settings?.redactionPack).toBe("strict");
+    expect(parsed.settings?.maxInterventionsRetained).toBe(3);
   });
 
   it("rejects invalid click action with no target", () => {

@@ -174,6 +174,74 @@ describe("adapter runtime", () => {
     }
   }, 120_000);
 
+  it("applies intervention retention policy in adapter session state", async () => {
+    const runtime = new AdapterRuntime();
+
+    try {
+      const create = await runtime.handleRequest({
+        id: "create",
+        method: "createSession",
+        params: {
+          options: {
+            headed: false,
+            deterministic: true,
+            captureScreenshots: false,
+            maxInterventionsRetained: 1
+          }
+        }
+      });
+      expect(create.ok).toBe(true);
+      const sessionId = (create.result as { sessionId: string }).sessionId;
+
+      await runtime.handleRequest({
+        id: "nav",
+        method: "performAction",
+        params: {
+          sessionId,
+          action: {
+            type: "navigate",
+            url: fixture.baseUrl
+          }
+        }
+      });
+
+      await runtime.handleRequest({ id: "pause-1", method: "pauseSession", params: { sessionId } });
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 60);
+      });
+      await runtime.handleRequest({ id: "resume-1", method: "resumeSession", params: { sessionId } });
+
+      await runtime.handleRequest({ id: "pause-2", method: "pauseSession", params: { sessionId } });
+      await new Promise((resolvePromise) => {
+        setTimeout(resolvePromise, 60);
+      });
+      const resumed = await runtime.handleRequest({
+        id: "resume-2",
+        method: "resumeSession",
+        params: { sessionId }
+      });
+      expect(resumed.ok).toBe(true);
+
+      const state = await runtime.handleRequest({
+        id: "state",
+        method: "getSessionState",
+        params: { sessionId }
+      });
+      expect(state.ok).toBe(true);
+
+      const payload = state.result as {
+        interventionJournal?: {
+          retained?: number;
+          maxRetained?: number;
+        };
+      };
+      expect(payload.interventionJournal?.retained).toBe(1);
+      expect(payload.interventionJournal?.maxRetained).toBe(1);
+    } finally {
+      await runtime.shutdown();
+    }
+  }, 120_000);
+
   it("accepts MCP-parity session control aliases", async () => {
     const runtime = new AdapterRuntime();
 

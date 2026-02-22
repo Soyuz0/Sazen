@@ -140,7 +140,8 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
     "deterministic": true,
     "stabilityProfile": "balanced",
     "captureScreenshots": true,
-    "screenshotMode": "viewport"
+    "screenshotMode": "viewport",
+    "maxInterventionsRetained": 100
   },
   "actions": [
     { "type": "setViewport", "width": 1366, "height": 768 },
@@ -254,6 +255,7 @@ Loop scripts support repeated **action -> observe -> branch** execution with opt
 - Trace output now includes:
   - `timeline` provenance markers: `pause_start`, `pause_resume`
   - `interventions` journal entries (pre/post URL + DOM hash, storage deltas, reconciliation hints)
+- Optional retention policy: set `maxInterventionsRetained` (script/adapter) or `--max-interventions-retained` (`run`/`loop`) to cap kept intervention journal entries.
 
 ### Browser overlay controls
 - By default, pages include a small top-right runtime panel with `Pause` and `Resume`.
@@ -292,6 +294,9 @@ Common options (available on most execution commands):
 - `--no-annotate-screenshots`
 - `--redaction-pack default|strict|off`
 - `--raw-logs`
+
+`run`/`loop` additional option:
+- `--max-interventions-retained <n>`
 
 ### Stability profiles
 - `fast`: smaller stability windows, quickest runs.

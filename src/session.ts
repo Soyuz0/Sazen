@@ -239,6 +239,7 @@ export class AgentSession {
         reconciliationHints
       };
       this.interventionJournal.push(journalEntry);
+      this.applyInterventionRetentionPolicy();
       this.pushControlTimelineEntry({
         actionType: "pause_resume",
         phase: "resume",
@@ -1534,11 +1535,43 @@ export class AgentSession {
     await appendFile(streamPath, `${JSON.stringify(payload)}\n`, "utf8");
   }
 
+  private applyInterventionRetentionPolicy(): void {
+    const limit = this.resolveInterventionRetentionLimit();
+    if (limit === undefined) {
+      return;
+    }
+
+    if (limit <= 0) {
+      this.interventionJournal.length = 0;
+      return;
+    }
+
+    if (this.interventionJournal.length > limit) {
+      this.interventionJournal.splice(0, this.interventionJournal.length - limit);
+    }
+  }
+
+  private resolveInterventionRetentionLimit(): number | undefined {
+    const raw = this.options.maxInterventionsRetained;
+    if (typeof raw !== "number" || !Number.isFinite(raw)) {
+      return undefined;
+    }
+
+    return Math.max(0, Math.floor(raw));
+  }
+
   getLatestIntervention(): InterventionJournalEntry | undefined {
     if (this.interventionJournal.length === 0) {
       return undefined;
     }
     return this.interventionJournal[this.interventionJournal.length - 1];
+  }
+
+  getInterventionJournalState(): { retained: number; maxRetained?: number } {
+    return {
+      retained: this.interventionJournal.length,
+      maxRetained: this.resolveInterventionRetentionLimit()
+    };
   }
 
   private async waitForExecutionResume(): Promise<void> {

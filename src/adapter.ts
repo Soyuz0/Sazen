@@ -216,6 +216,7 @@ export class AdapterRuntime {
   private async pauseSession(params: Record<string, unknown>): Promise<unknown> {
     const entry = this.requireSessionEntry(params.sessionId);
     const state = entry.session.pauseExecution("adapter");
+    const journal = entry.session.getInterventionJournalState();
 
     return {
       paused: state.paused,
@@ -223,13 +224,15 @@ export class AdapterRuntime {
       sources: state.sources,
       runActive: entry.control.runActive,
       runId: entry.control.runId,
-      latestIntervention: entry.session.getLatestIntervention()
+      latestIntervention: entry.session.getLatestIntervention(),
+      interventionJournal: journal
     };
   }
 
   private async resumeSession(params: Record<string, unknown>): Promise<unknown> {
     const entry = this.requireSessionEntry(params.sessionId);
     const state = await entry.session.resumeExecution("adapter");
+    const journal = entry.session.getInterventionJournalState();
 
     return {
       paused: state.paused,
@@ -237,20 +240,23 @@ export class AdapterRuntime {
       sources: state.sources,
       runActive: entry.control.runActive,
       runId: entry.control.runId,
-      latestIntervention: entry.session.getLatestIntervention()
+      latestIntervention: entry.session.getLatestIntervention(),
+      interventionJournal: journal
     };
   }
 
   private async getSessionState(params: Record<string, unknown>): Promise<unknown> {
     const entry = this.requireSessionEntry(params.sessionId);
     const state = entry.session.getExecutionControlState();
+    const journal = entry.session.getInterventionJournalState();
     return {
       paused: state.paused,
       runActive: entry.control.runActive,
       runId: entry.control.runId,
       pausedMs: state.pausedMs,
       sources: state.sources,
-      latestIntervention: entry.session.getLatestIntervention()
+      latestIntervention: entry.session.getLatestIntervention(),
+      interventionJournal: journal
     };
   }
 
