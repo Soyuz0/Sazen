@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { appendMatrixSummaryToDriftHistory } from "../src/drift-monitor.js";
+import {
+  appendMatrixSummaryToDriftHistory,
+  buildDriftRecommendationReport
+} from "../src/drift-monitor.js";
 
 describe("drift monitor", () => {
   it("aggregates recurring failure signatures across matrix runs", async () => {
@@ -127,6 +130,14 @@ describe("drift monitor", () => {
       const siteB = second.aggregate.siteFailureRates.find((entry) => entry.site === "site-b");
       expect(siteA?.failureRate).toBe(1);
       expect(siteB?.failureRate).toBe(0);
+
+      const recommendations = buildDriftRecommendationReport({
+        aggregate: second.aggregate,
+        minOccurrences: 2,
+        top: 5
+      });
+      expect(recommendations.totalRecommendations).toBeGreaterThan(0);
+      expect(recommendations.recommendations[0]?.priority).toBe("high");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

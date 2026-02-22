@@ -107,6 +107,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented named checkpoint/resume support for long scripts (`checkpoint` action + `run --resume-from-checkpoint`).
 - Implemented per-source intervention retention quotas (`interventionSourceQuotas` / `--intervention-source-quotas`).
 - Implemented drift-monitor data pipeline with historical run ingestion and recurring failure signature aggregation (`reports/drift-monitor/history.json`, `aggregate.json`).
+- Implemented drift recommendation layer and CLI reporting (`drift-monitor`) for ranked selector/wait strategy guidance.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -222,8 +223,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **P2 - Completed: Auto-retry with evidence policy** via bounded retries and persisted per-attempt evidence/final rationale in action results, timeline rows, and trace records.
 - **P2 - Completed: Session identity clarity in adapter responses** via explicit `adapterSessionId`, `runtimeSessionId`, and `runtimeTabId` fields while preserving compatibility.
 - **P2 - Completed: Checkpoint/resume for long flows** via named `checkpoint` actions, script-hash-safe checkpoint manifests, and `run --resume-from-checkpoint` continuation.
-- **P3 - In progress: Cross-site drift monitor data pipeline completed** (historical run ingestion + recurring failure signatures + site failure rates).
-- **P3 - Remaining: drift recommendation layer** to auto-suggest selector strategy updates from recurring signatures.
+- **P3 - Completed: Cross-site drift monitor** with historical ingestion, recurring signature aggregation, and ranked recommendation reporting.
 - **P3 - Consent/login plugin registry (Low-Medium impact, Medium effort):** domain adapters for recurring consent and login patterns discovered in smoke runs. (Partial: consent strategy hooks + site adapters exist; formal plugin registry and login adapters still pending.)
 
 ### Medium-Term (v1)

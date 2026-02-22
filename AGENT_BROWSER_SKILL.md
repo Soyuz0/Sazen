@@ -53,6 +53,7 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 npm run dev -- timeline-html traces/sample-trace.json
 npm run dev -- selector-health traces/sample-trace.json
 npm run dev -- run-index traces/sample-trace.json
+npm run dev -- drift-monitor
 ```
 
 Use timeline HTML presets and diff-only focus mode for long traces when narrowing to high-signal rows.

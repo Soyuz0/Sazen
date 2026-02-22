@@ -82,6 +82,25 @@ export interface DriftAggregateReport {
   }>;
 }
 
+export interface DriftRecommendation {
+  signature: string;
+  occurrences: number;
+  sites: string[];
+  priority: "high" | "medium" | "low";
+  reason: string;
+  recommendation: string;
+}
+
+export interface DriftRecommendationReport {
+  createdAt: string;
+  totalRecommendations: number;
+  recommendations: DriftRecommendation[];
+}
+
+export async function loadDriftHistoryFromFile(historyPath: string): Promise<DriftHistory> {
+  return readDriftHistory(resolve(historyPath));
+}
+
 export async function appendMatrixSummaryToDriftHistory(input: {
   matrixSummaryPath: string;
   historyPath?: string;
@@ -183,6 +202,108 @@ export function buildDriftAggregate(history: DriftHistory): DriftAggregateReport
     recurringFailures,
     siteFailureRates
   };
+}
+
+export function buildDriftRecommendationReport(input: {
+  aggregate: DriftAggregateReport;
+  minOccurrences?: number;
+  top?: number;
+}): DriftRecommendationReport {
+  const minOccurrences = Math.max(1, Math.floor(input.minOccurrences ?? 2));
+  const top = Math.max(1, Math.floor(input.top ?? 20));
+
+  const recommendations: DriftRecommendation[] = [];
+
+  for (const failure of input.aggregate.recurringFailures) {
+    if (failure.occurrences < minOccurrences) {
+      continue;
+    }
+
+    const parsed = parseFailureSignature(failure.signature);
+    const timeout = parsed.timeout === "yes" || Number(parsed.selectorTimeouts ?? 0) > 0;
+    const selectorFailures = Number(parsed.selectorFailures ?? 0);
+    const failedActions = Number(parsed.failedActions ?? 0);
+    const selectorTarget = parsed.selectorTarget;
+
+    let priority: DriftRecommendation["priority"] = "low";
+    if (timeout || selectorFailures > 0) {
+      priority = "high";
+    } else if (failedActions > 0 || failure.occurrences >= 3) {
+      priority = "medium";
+    }
+
+    const reasonParts: string[] = [];
+    if (timeout) {
+      reasonParts.push("timeout-heavy recurring failure");
+    }
+    if (selectorFailures > 0) {
+      reasonParts.push(`selector failures=${selectorFailures}`);
+    }
+    if (failedActions > 0) {
+      reasonParts.push(`failed actions per run=${failedActions}`);
+    }
+    if (reasonParts.length === 0) {
+      reasonParts.push("recurs across multiple runs");
+    }
+
+    const recommendationParts: string[] = [];
+    if (selectorTarget && selectorTarget !== "none") {
+      recommendationParts.push(
+        `Harden target '${selectorTarget}' with stableRef/roleName fallbacks and stronger post-action asserts.`
+      );
+    } else {
+      recommendationParts.push("Add explicit selector/assert guards around the failing interaction boundary.");
+    }
+    if (timeout) {
+      recommendationParts.push(
+        "Prefer `waitFor` with `network_response` or increase stability profile before retrying selectors."
+      );
+    }
+
+    recommendations.push({
+      signature: failure.signature,
+      occurrences: failure.occurrences,
+      sites: failure.sites,
+      priority,
+      reason: reasonParts.join("; "),
+      recommendation: recommendationParts.join(" ")
+    });
+  }
+
+  const priorityRank: Record<DriftRecommendation["priority"], number> = {
+    high: 0,
+    medium: 1,
+    low: 2
+  };
+
+  const ranked = recommendations
+    .sort(
+      (left, right) =>
+        priorityRank[left.priority] - priorityRank[right.priority] ||
+        right.occurrences - left.occurrences ||
+        left.signature.localeCompare(right.signature)
+    )
+    .slice(0, top);
+
+  return {
+    createdAt: new Date().toISOString(),
+    totalRecommendations: ranked.length,
+    recommendations: ranked
+  };
+}
+
+function parseFailureSignature(signature: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (const segment of signature.split("|")) {
+    const index = segment.indexOf(":");
+    if (index <= 0 || index >= segment.length - 1) {
+      continue;
+    }
+    const key = segment.slice(0, index);
+    const value = segment.slice(index + 1);
+    parsed[key] = value;
+  }
+  return parsed;
 }
 
 async function toDriftRunRecord(matrix: MatrixSummary, sourceSummaryPath: string): Promise<DriftRunRecord> {

@@ -9,6 +9,11 @@ import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { AdapterRuntime, type AdapterRequest } from "./adapter.js";
 import { cliActionSchema, parseLoopScript, parseScript } from "./contracts.js";
+import {
+  buildDriftAggregate,
+  buildDriftRecommendationReport,
+  loadDriftHistoryFromFile
+} from "./drift-monitor.js";
 import { renderLiveTimelineTuiFrame, toLiveTimelineEntry, type LiveTimelineEntry } from "./live-timeline.js";
 import { runLoop } from "./loop.js";
 import { formatEvent } from "./observer.js";
@@ -44,6 +49,7 @@ configureTimelineCommand(program);
 configureBundleCommand(program);
 configureRunIndexCommand(program);
 configureSelectorHealthCommand(program);
+configureDriftMonitorCommand(program);
 configureTimelineHtmlCommand(program);
 configureVisualDiffCommand(program);
 configureAdapterStdioCommand(program);
@@ -1001,6 +1007,69 @@ function configureSelectorHealthCommand(root: Command): void {
       console.log(`Selector health: ${outPath}`);
       for (const line of formatSelectorHealthSummary(report)) {
         console.log(`- ${line}`);
+      }
+    });
+}
+
+function configureDriftMonitorCommand(root: Command): void {
+  root
+    .command("drift-monitor")
+    .description("Summarize recurring cross-site drift signatures and recommendations")
+    .argument("[historyPath]", "Path to drift history JSON", "reports/drift-monitor/history.json")
+    .option("--aggregate <path>", "Aggregate report output path", "reports/drift-monitor/aggregate.json")
+    .option("--out <path>", "Recommendation report output path", "reports/drift-monitor/recommendations.json")
+    .option("--min-occurrences <n>", "Minimum occurrences for recommendation eligibility", "2")
+    .option("--top <n>", "Maximum recommendations", "10")
+    .option("--json", "Print full report JSON", false)
+    .action(async (historyPath: string, options: Record<string, string | boolean>) => {
+      const history = await loadDriftHistoryFromFile(historyPath);
+      const aggregate = buildDriftAggregate(history);
+      const recommendations = buildDriftRecommendationReport({
+        aggregate,
+        minOccurrences: Math.max(1, toNumber(options.minOccurrences, 2)),
+        top: Math.max(1, toNumber(options.top, 10))
+      });
+
+      const aggregatePath = resolve(
+        typeof options.aggregate === "string" ? options.aggregate : "reports/drift-monitor/aggregate.json"
+      );
+      const recommendationsPath = resolve(
+        typeof options.out === "string" ? options.out : "reports/drift-monitor/recommendations.json"
+      );
+
+      await mkdir(dirname(aggregatePath), { recursive: true });
+      await writeFile(aggregatePath, JSON.stringify(aggregate, null, 2), "utf8");
+
+      await mkdir(dirname(recommendationsPath), { recursive: true });
+      await writeFile(recommendationsPath, JSON.stringify(recommendations, null, 2), "utf8");
+
+      if (Boolean(options.json)) {
+        console.log(
+          JSON.stringify(
+            {
+              historyPath: resolve(historyPath),
+              aggregate,
+              recommendations
+            },
+            null,
+            2
+          )
+        );
+        return;
+      }
+
+      console.log(`Drift history: ${resolve(historyPath)}`);
+      console.log(`Aggregate: ${aggregatePath}`);
+      console.log(`Recommendations: ${recommendationsPath}`);
+      console.log(`- total runs: ${aggregate.totalRuns}`);
+      console.log(`- runs with failures: ${aggregate.runsWithFailures}`);
+      console.log(`- recurring signatures: ${aggregate.recurringFailures.length}`);
+      console.log(`- recommendations: ${recommendations.totalRecommendations}`);
+
+      for (const recommendation of recommendations.recommendations) {
+        console.log(
+          `  - [${recommendation.priority}] ${recommendation.occurrences}x ${recommendation.signature}`
+        );
       }
     });
 }

@@ -124,6 +124,7 @@ When `run` or `loop` saves a trace (`--trace`), companion outputs are generated 
 - `visual-diff <baselineTrace> <candidateTrace>`: screenshot diff overlays.
 - `selector-health <trace>`: selector fragility report (fallback/ambiguity/timeout hotspots).
 - `run-index <trace>`: canonical run artifact index for external ingestion.
+- `drift-monitor [history.json]`: recurring cross-run drift signatures + recommendation report.
 
 ### External agent adapter
 - `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
@@ -398,6 +399,7 @@ Common options (available on most execution commands):
 - `reports/site-matrix-summary.json`: matrix summary.
 - `reports/drift-monitor/history.json`: accumulated cross-run drift history.
 - `reports/drift-monitor/aggregate.json`: recurring failure signature + site failure-rate aggregate.
+- `reports/drift-monitor/recommendations.json`: ranked drift recommendations.
 - `reports/timeline-html/`: timeline HTML reports.
 - `reports/visual-diff/`: visual diff images/reports.
 - `reports/triage-bundles/`: packaged triage outputs.
@@ -500,7 +502,8 @@ Implemented now:
 - trace-scoped role switching, visual baseline assert, live timeline TUI, selector health + run index
 - network-aware wait primitives via `waitFor.condition.kind = network_response`
 - bounded action auto-retry policy with per-attempt evidence + final rationale in traces
+- cross-run drift monitor aggregation and recommendation reporting
 
 Planned (tracked in `.plan`):
-- cross-site drift monitor and consent/login plugin registry
+- consent/login plugin registry
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio
