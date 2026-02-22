@@ -522,6 +522,32 @@ Key output paths:
 - `.sazen/sessions/`
 - `.sazen/profiles/`
 
+### 8.1 Critical: screenshot context is file-backed, not model-auto-ingested
+
+When an action produces a screenshot, Sazen writes files (artifacts + context pointers), but an external agent runtime does **not** automatically receive image bytes in model context.
+
+This applies across adapter surfaces (`adapter-stdio`, `adapter-opencode`, `adapter-claude`, `adapter-codex`) unless your host/runtime explicitly inlines image payloads.
+
+Required operator behavior for image-aware decisions:
+1. Run screenshot-producing action (`click`, `fill`, `snapshot`, etc.).
+2. Read `.sazen/context/latest.json` to resolve `latestPath` / `sourcePath`.
+3. Explicitly load the referenced image file into agent context.
+4. Only then decide the next action.
+
+Do not assume "screenshot taken" means "model already sees image." Treat screenshot ingestion as an explicit read step every cycle.
+
+Minimal pattern:
+
+```bash
+# 1) run action(s) that produce screenshots
+npm run dev -- run examples/sample-flow.json --trace traces/sample-trace.json
+
+# 2) read latest context pointer
+cat .sazen/context/latest.json
+
+# 3) load latestPath/sourcePath image into your agent runtime before deciding next action
+```
+
 ## 9) Adapter Protocols
 
 ### 9.1 Shared contract

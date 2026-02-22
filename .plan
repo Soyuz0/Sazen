@@ -211,7 +211,12 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
   - Existing replay/visual/timeline suites stay green.
 
 ### Near-Term (v0.x) - Remaining
-- (none; current near-term tranche is complete)
+- **Loop logging ergonomics:** add long-run loop output controls (`--loop-log-every`, `--loop-summary-only`, `--loop-log-branches-only-on-change`) to reduce operator noise.
+- **Run-control socket readiness UX:** add `run-control --wait-for-socket-ms <n>` to avoid startup race (`ENOENT`) when controlling fresh runs.
+- **Selector-health policy gates:** add CI-friendly thresholds (ambiguity/fallback rates) with non-zero exit support.
+- **Context peek helper:** add `context-peek` command to print latest screenshot/context metadata (`actionId`, `url`, `domHash`, paths).
+- **Loop KPI sidecar report:** emit `loop-metrics.json` with iteration timing percentiles, branch frequency, and stop-reason summary.
+- **Context history index:** add `.sazen/context/context-index.json` rolling index for run/action-level screenshot retrieval.
 
 ### Near-Term (v0.x) - Completed
 - **Resilient selector healing:** completed via ranked fallback locator chain (test id/id/href/name/role/css path) plus ambiguity ranking and disambiguation.
@@ -266,3 +271,9 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Resolved:** element-aware diff overlays including target boxes and semantic labels.
 - **Resolved:** default screenshot context handoff for immediate feedback loops.
 - **Resolved:** timeline inspector filter presets and diff-only focus mode for long traces.
+- **Open:** loop output can be noisy in long iterations; add loop log throttling/summary controls.
+- **Open:** `run-control` can race control socket startup; add readiness wait/retry option.
+- **Open:** ambiguity/fallback signals should support CI gating before hard failures.
+- **Open:** loop analytics should expose first-class KPI sidecars for trend tracking.
+- **Open:** context handoff needs easier historical browseability (`context-index.json`).
+- **Open:** screenshot ingestion expectations need explicit helper UX (`context-peek`).
