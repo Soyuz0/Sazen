@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash } from "node:crypto";
 import { createConnection, createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
@@ -10,6 +11,7 @@ import { Command } from "commander";
 import { AdapterRuntime, type AdapterRequest } from "./adapter.js";
 import { ClaudeCodeAdapterBridge } from "./claude-adapter.js";
 import { cliActionSchema, parseLoopScript, parseScript } from "./contracts.js";
+import { CodexAdapterService } from "./codex-adapter.js";
 import {
   buildDriftAggregate,
   buildDriftRecommendationReport,
@@ -21,6 +23,7 @@ import { runLoop } from "./loop.js";
 import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
 import { buildRunArtifactIndex } from "./run-index.js";
+import { SDK_CONTRACT_VERSION } from "./sdk-contract.js";
 import { buildSelectorHealthReport, formatSelectorHealthSummary } from "./selector-health.js";
 import { AgentSession } from "./session.js";
 import { createAgentPageDescription, tokenOptimizedSnapshot } from "./snapshot.js";
@@ -57,6 +60,7 @@ configureVisualDiffCommand(program);
 configureAdapterStdioCommand(program);
 configureAdapterOpenCodeCommand(program);
 configureAdapterClaudeCodeCommand(program);
+configureAdapterCodexCommand(program);
 configureRunControlCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
@@ -1350,6 +1354,124 @@ async function runAdapterStdioServer(
   }
 
   await shutdownAdapter();
+}
+
+function configureAdapterCodexCommand(root: Command): void {
+  root
+    .command("adapter-codex")
+    .description("Run Codex local HTTP adapter service")
+    .option("--host <host>", "Bind host", "127.0.0.1")
+    .option("--port <port>", "Bind port", "4242")
+    .action(async (options: Record<string, string | boolean>) => {
+      const runtime = new AdapterRuntime();
+      const service = new CodexAdapterService(runtime);
+      const host = typeof options.host === "string" ? options.host : "127.0.0.1";
+      const port = Math.max(1, toNumber(options.port, 4_242));
+      const server = createHttpServer((request, response) => {
+        void handleCodexHttpRequest(request, response, service);
+      });
+
+      let shutdownPromise: Promise<void> | null = null;
+      const shutdownServer = async () => {
+        if (shutdownPromise) {
+          return shutdownPromise;
+        }
+
+        shutdownPromise = (async () => {
+          process.off("SIGTERM", onSigTerm);
+          await new Promise<void>((resolvePromise, rejectPromise) => {
+            server.close((error) => {
+              if (error) {
+                rejectPromise(error);
+                return;
+              }
+              resolvePromise();
+            });
+          }).catch(() => undefined);
+          await service.shutdown().catch((error) => {
+            if (!isBenignShutdownError(error)) {
+              throw error;
+            }
+          });
+        })();
+
+        return shutdownPromise;
+      };
+
+      const onSigTerm = () => {
+        void shutdownServer();
+      };
+      process.on("SIGTERM", onSigTerm);
+
+      await new Promise<void>((resolvePromise, rejectPromise) => {
+        server.once("error", rejectPromise);
+        server.listen(port, host, () => {
+          server.off("error", rejectPromise);
+          resolvePromise();
+        });
+      });
+
+      console.log(`Codex adapter listening on http://${host}:${port}`);
+      await waitForInterrupt();
+      await shutdownServer();
+    });
+}
+
+async function handleCodexHttpRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  service: CodexAdapterService
+): Promise<void> {
+  const method = (request.method ?? "GET").toUpperCase();
+  const path = new URL(request.url ?? "/", "http://localhost").pathname;
+
+  try {
+    const body = method === "POST" ? await readJsonBody(request) : undefined;
+    const result = await service.handleRequest({ method, path, body });
+    writeJson(response, result.ok ? 200 : 400, result);
+  } catch (error) {
+    const payload = {
+      ok: false,
+      status: "error",
+      error: {
+        message: error instanceof Error ? error.message : String(error)
+      },
+      meta: {
+        endpoint: path,
+        sdkContractVersion: SDK_CONTRACT_VERSION,
+        timestamp: new Date().toISOString()
+      }
+    };
+    writeJson(response, 400, payload);
+  }
+}
+
+async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  if (chunks.length === 0) {
+    return undefined;
+  }
+
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch (error) {
+    throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function writeJson(response: ServerResponse, statusCode: number, payload: unknown): void {
+  response.statusCode = statusCode;
+  response.setHeader("content-type", "application/json; charset=utf-8");
+  response.end(JSON.stringify(payload));
 }
 
 function configureRunControlCommand(root: Command): void {

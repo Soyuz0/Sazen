@@ -106,6 +106,7 @@ Start server:
 npm run dev -- adapter-stdio
 npm run dev -- adapter-opencode
 npm run dev -- adapter-claude
+npm run dev -- adapter-codex -- --host 127.0.0.1 --port 4242
 ```
 
 Send JSON lines:
@@ -128,6 +129,7 @@ Notes:
 - `adapter-opencode` supports `oc.*` method aliases mapped onto the unified SDK contract methods.
 - `adapter-claude` supports `cc.*` aliases and slash command dispatch (`cc.command` with `command: "/browser/..."`).
 - `adapter-claude` responses use a stable envelope (`ok`, `status`, `data`, `error`, `meta`).
+- `adapter-codex` exposes local HTTP endpoints for Codex tool use (`/v1/action`, `/v1/replay`, `/v1/timeline`, and session endpoints).
 
 ## Validation Loop (Required)
 
