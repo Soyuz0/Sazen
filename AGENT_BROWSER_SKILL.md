@@ -56,6 +56,7 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 - Keep deterministic mode enabled unless explicitly diagnosing runtime drift.
 - Use semantic targets first (`roleName`, `stableRef`, `node`) and CSS only as fallback.
 - Use `switchProfile` inside scripts when a single run needs role transitions (for example, user to admin).
+- Use `assert` with `visual_baseline` when step-level screenshot gating is needed.
 - If strict replay mismatches on public/dynamic pages, retry with relaxed replay + selector invariants.
 - For unstable traces, run `flake` before changing selectors.
 

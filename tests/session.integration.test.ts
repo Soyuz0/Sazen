@@ -473,6 +473,60 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("supports visual baseline asserts within assert actions", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-visual-assert-"));
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      browserOverlay: false,
+      captureScreenshots: true,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      const nav = await session.perform({ type: "navigate", url: fixture.baseUrl });
+      expect(nav.status).toBe("ok");
+      expect(typeof nav.screenshotPath).toBe("string");
+
+      const baselinePath = nav.screenshotPath as string;
+      const passing = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "visual_baseline",
+          baselinePath,
+          maxMismatchRatio: 0
+        }
+      });
+      expect(passing.status).toBe("ok");
+
+      const fill = await session.perform({
+        type: "fill",
+        target: {
+          kind: "css",
+          selector: "[data-testid='email-input']"
+        },
+        value: "changed@example.com"
+      });
+      expect(fill.status).toBe("ok");
+
+      const failing = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "visual_baseline",
+          baselinePath,
+          maxMismatchRatio: 0
+        }
+      });
+      expect(failing.status).toBe("fatal_error");
+      expect(failing.error?.message).toContain("Visual baseline assert failed");
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("supports pause action and captures intervention summary", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-pause-"));
 

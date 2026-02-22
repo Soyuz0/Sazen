@@ -176,8 +176,23 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
 - `selector` (state + optional textContains)
 - `selector_bbox_min` (min width/height)
 - `selector_overlap_max` (max overlap ratio between two selectors)
+- `visual_baseline` (compare current screenshot to baseline image)
 - `url_contains`
 - `title_contains`
+
+Visual baseline assert example:
+
+```json
+{
+  "type": "assert",
+  "condition": {
+    "kind": "visual_baseline",
+    "baselinePath": "reports/baselines/home.png",
+    "maxMismatchRatio": 0.01,
+    "threshold": 0.1
+  }
+}
+```
 
 ### Pause action
 - `pause` lets the run pause for manual review and then resume.

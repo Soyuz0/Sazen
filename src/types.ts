@@ -200,6 +200,13 @@ export type AssertCondition =
   | {
       kind: "title_contains";
       value: string;
+    }
+  | {
+      kind: "visual_baseline";
+      baselinePath: string;
+      maxMismatchRatio?: number;
+      threshold?: number;
+      diffPath?: string;
     };
 
 export interface AssertAction {

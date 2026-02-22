@@ -94,6 +94,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented MCP-parity session control aliases in adapter runtime (`session.pause`, `session.resume`, `session.state`).
 - Implemented first-class `loop` runner with action->observe->branch flow and optional iteration cap (`loop` command + loop script schema).
 - Implemented trace-scoped profile switching action (`switchProfile`) for in-run role transitions.
+- Implemented visual baseline assert condition (`assert` + `visual_baseline`) with mismatch thresholding and diff artifacts.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -143,6 +144,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Hardened shutdown paths for `open`/`load`/adapter flows with idempotent close handling and benign close-race suppression.
 - Added loop runner integration coverage and fixture flow for branch-on-observation execution.
 - Added integration coverage for switching between saved profiles inside a single trace run.
+- Added integration coverage for pass/fail visual baseline assertions within regular action scripts.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -185,13 +187,13 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
   - Existing replay/visual/timeline suites stay green.
 
 ### Near-Term (v0.x) - Remaining
-- **Visual diff assertions:** compare screenshots against stored baselines within assert actions.
 - **Live timeline TUI:** terminal pane with auto-updating action timeline and artifact links during execution.
 
 ### Near-Term (v0.x) - Completed
 - **Resilient selector healing:** completed via ranked fallback locator chain (test id/id/href/name/role/css path) plus ambiguity ranking and disambiguation.
 - **Context-native screenshot handoff (default-on):** completed via automatic attachment publication under `.agent-browser/context/` (`latest.json`, `attachments.jsonl`, latest/archive images).
 - **Trace-scoped role switching:** completed via `switchProfile` action for profile selection directly inside scripts/replay sessions.
+- **Visual diff assertions:** completed via `assert` condition kind `visual_baseline` with baseline thresholding and diff evidence.
 
 ### Prioritized Post-Dogfooding Additions (Impact vs Effort)
 - **P0 - Completed: Graceful interrupt/shutdown hardening** (idempotent session/adapter shutdown, cancellable interrupt waiters, close-race noise suppression).

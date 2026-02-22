@@ -1,5 +1,5 @@
 import { appendFile, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 import { annotateActionScreenshot } from "./annotate.js";
@@ -11,6 +11,7 @@ import {
 } from "./deterministic.js";
 import { BrowserObserver, collectPerformanceMetrics } from "./observer.js";
 import { diffSnapshots, takeDomSnapshot } from "./snapshot.js";
+import { comparePngFiles } from "./visual.js";
 import type {
   Action,
   ActionResult,
@@ -985,6 +986,60 @@ export class AgentSession {
       if (overlapRatio > action.condition.maxOverlapRatio) {
         throw new Error(
           `Assert failed: overlap ratio ${overlapRatio.toFixed(3)} exceeds max ${action.condition.maxOverlapRatio.toFixed(3)}`
+        );
+      }
+
+      return;
+    }
+
+    if (action.condition.kind === "visual_baseline") {
+      const condition = action.condition;
+      const baselinePath = resolve(condition.baselinePath);
+      const page = this.requirePage();
+
+      const assertDir = resolve(
+        this.options.artifactsDir ?? DEFAULT_OPTIONS.artifactsDir,
+        this.sessionId,
+        "assertions"
+      );
+      await mkdir(assertDir, { recursive: true });
+
+      const stamp = `${Date.now()}-${randomUUID().slice(0, 8)}`;
+      const candidatePath = join(assertDir, `visual-candidate-${stamp}.png`);
+      const diffPath =
+        typeof condition.diffPath === "string" && condition.diffPath.length > 0
+          ? resolve(condition.diffPath)
+          : join(
+              assertDir,
+              `${basename(baselinePath, extname(baselinePath) || ".png")}-vs-${basename(candidatePath, ".png")}.diff.png`
+            );
+
+      await page.screenshot({
+        path: candidatePath,
+        fullPage: (this.options.screenshotMode ?? DEFAULT_OPTIONS.screenshotMode) === "fullpage"
+      });
+
+      const compared = await comparePngFiles(baselinePath, candidatePath, {
+        threshold: condition.threshold ?? 0.1,
+        diffPath
+      });
+
+      if (compared.status === "size_mismatch") {
+        throw new Error(
+          `Visual baseline assert failed: image size mismatch baseline='${baselinePath}' candidate='${candidatePath}'`
+        );
+      }
+
+      const maxMismatchRatio = condition.maxMismatchRatio ?? 0.01;
+      if (compared.mismatchRatio > maxMismatchRatio) {
+        throw new Error(
+          [
+            "Visual baseline assert failed:",
+            `mismatchRatio=${compared.mismatchRatio.toFixed(6)} max=${maxMismatchRatio.toFixed(6)}`,
+            `baseline='${baselinePath}'`,
+            `candidate='${candidatePath}'`,
+            `diff='${diffPath}'`
+          ].join(" ")
         );
       }
 

@@ -118,6 +118,18 @@ describe("contracts", () => {
     });
     expect(overlapAssert.type).toBe("assert");
 
+    const visualAssert = parseAction({
+      type: "assert",
+      condition: {
+        kind: "visual_baseline",
+        baselinePath: "reports/baselines/home.png",
+        maxMismatchRatio: 0.01,
+        threshold: 0.1,
+        diffPath: "reports/visual-diff/home.diff.png"
+      }
+    });
+    expect(visualAssert.type).toBe("assert");
+
     const pauseAction = parseAction({
       type: "pause",
       mode: "timeout",

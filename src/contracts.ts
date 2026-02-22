@@ -62,6 +62,13 @@ const assertConditionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("title_contains"),
     value: z.string().min(1)
+  }),
+  z.object({
+    kind: z.literal("visual_baseline"),
+    baselinePath: z.string().min(1),
+    maxMismatchRatio: z.number().min(0).max(1).optional(),
+    threshold: z.number().min(0).max(1).optional(),
+    diffPath: z.string().min(1).optional()
   })
 ]);
 
