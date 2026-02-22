@@ -112,6 +112,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented initial login plugin pack via `handleLogin` action (GitHub-style selectors + generic fallback through registry).
 - Implemented unified SDK contract surface (`src/sdk-contract.ts`) with version handshake via adapter `ping.sdkContractVersion`.
 - Implemented first-class OpenCode adapter bridge (`adapter-opencode`) with `oc.*` alias mapping onto the unified SDK contract methods.
+- Implemented Claude Code adapter bridge (`adapter-claude`) with `cc.*` aliases, slash-command dispatch, and stable response envelope metadata.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -246,7 +247,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 
 ## Agent-IDE Integration (Planned)
 - **Completed: OpenCode integration adapter** via `adapter-opencode` bridge and `oc.*` method aliases.
-- **Claude Code integration adapter:** slash-command oriented bridge and stable output schema for autonomous browser workflows in Claude Code sessions.
+- **Completed: Claude Code integration adapter** via `adapter-claude` bridge, `cc.*` aliases, slash-command routing, and stable response envelope schema.
 - **OpenAI Codex integration adapter:** lightweight local service exposing action/replay/timeline endpoints with deterministic schema for Codex tool use.
 - **Completed: Unified SDK contract** via `src/sdk-contract.ts` + adapter contract version handshake.
 

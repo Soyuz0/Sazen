@@ -8,6 +8,7 @@ import process from "node:process";
 import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { AdapterRuntime, type AdapterRequest } from "./adapter.js";
+import { ClaudeCodeAdapterBridge } from "./claude-adapter.js";
 import { cliActionSchema, parseLoopScript, parseScript } from "./contracts.js";
 import {
   buildDriftAggregate,
@@ -55,6 +56,7 @@ configureTimelineHtmlCommand(program);
 configureVisualDiffCommand(program);
 configureAdapterStdioCommand(program);
 configureAdapterOpenCodeCommand(program);
+configureAdapterClaudeCodeCommand(program);
 configureRunControlCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
@@ -1227,89 +1229,10 @@ function configureAdapterStdioCommand(root: Command): void {
     .description("Run line-delimited JSON adapter server over stdio")
     .action(async () => {
       const runtime = new AdapterRuntime();
-      const rl = createInterface({
-        input: process.stdin,
-        crlfDelay: Infinity
-      });
-      const pending = new Set<Promise<void>>();
-      let shutdownPromise: Promise<void> | null = null;
-
-      const writeResponse = (payload: unknown) => {
-        process.stdout.write(`${JSON.stringify(payload)}\n`);
-      };
-
-      const shutdownAdapter = async () => {
-        if (shutdownPromise) {
-          return shutdownPromise;
-        }
-
-        shutdownPromise = (async () => {
-          process.off("SIGINT", onSigInt);
-          process.off("SIGTERM", onSigTerm);
-
-          rl.close();
-          await Promise.allSettled([...pending]);
-          await runtime.shutdown().catch((error) => {
-            if (!isBenignShutdownError(error)) {
-              throw error;
-            }
-          });
-        })();
-
-        return shutdownPromise;
-      };
-
-      const onSigInt = () => {
-        void shutdownAdapter();
-      };
-      const onSigTerm = () => {
-        void shutdownAdapter();
-      };
-
-      process.on("SIGINT", onSigInt);
-      process.on("SIGTERM", onSigTerm);
-
-      for await (const line of rl) {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          continue;
-        }
-
-        let request: AdapterRequest;
-        try {
-          request = JSON.parse(trimmed) as AdapterRequest;
-        } catch (error) {
-          writeResponse({
-            ok: false,
-            error: {
-              message: `Invalid JSON request: ${error instanceof Error ? error.message : String(error)}`
-            }
-          });
-          continue;
-        }
-
-        let task: Promise<void>;
-        task = runtime
-          .handleRequest(request)
-          .then((response) => {
-            writeResponse(response);
-          })
-          .catch((error) => {
-            writeResponse({
-              id: request.id,
-              ok: false,
-              error: {
-                message: error instanceof Error ? error.message : String(error)
-              }
-            });
-          })
-          .finally(() => {
-            pending.delete(task);
-          });
-        pending.add(task);
-      }
-
-      await shutdownAdapter();
+      await runAdapterStdioServer(
+        (request) => runtime.handleRequest(request),
+        () => runtime.shutdown()
+      );
     });
 }
 
@@ -1320,90 +1243,113 @@ function configureAdapterOpenCodeCommand(root: Command): void {
     .action(async () => {
       const runtime = new AdapterRuntime();
       const bridge = new OpenCodeAdapterBridge(runtime);
-      const rl = createInterface({
-        input: process.stdin,
-        crlfDelay: Infinity
-      });
-      const pending = new Set<Promise<void>>();
-      let shutdownPromise: Promise<void> | null = null;
-
-      const writeResponse = (payload: unknown) => {
-        process.stdout.write(`${JSON.stringify(payload)}\n`);
-      };
-
-      const shutdownAdapter = async () => {
-        if (shutdownPromise) {
-          return shutdownPromise;
-        }
-
-        shutdownPromise = (async () => {
-          process.off("SIGINT", onSigInt);
-          process.off("SIGTERM", onSigTerm);
-
-          rl.close();
-          await Promise.allSettled([...pending]);
-          await runtime.shutdown().catch((error) => {
-            if (!isBenignShutdownError(error)) {
-              throw error;
-            }
-          });
-        })();
-
-        return shutdownPromise;
-      };
-
-      const onSigInt = () => {
-        void shutdownAdapter();
-      };
-      const onSigTerm = () => {
-        void shutdownAdapter();
-      };
-
-      process.on("SIGINT", onSigInt);
-      process.on("SIGTERM", onSigTerm);
-
-      for await (const line of rl) {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          continue;
-        }
-
-        let request: AdapterRequest;
-        try {
-          request = JSON.parse(trimmed) as AdapterRequest;
-        } catch (error) {
-          writeResponse({
-            ok: false,
-            error: {
-              message: `Invalid JSON request: ${error instanceof Error ? error.message : String(error)}`
-            }
-          });
-          continue;
-        }
-
-        let task: Promise<void>;
-        task = bridge
-          .handleRequest(request)
-          .then((response) => {
-            writeResponse(response);
-          })
-          .catch((error) => {
-            writeResponse({
-              id: request.id,
-              ok: false,
-              error: {
-                message: error instanceof Error ? error.message : String(error)
-              }
-            });
-          })
-          .finally(() => {
-            pending.delete(task);
-          });
-        pending.add(task);
-      }
-
-      await shutdownAdapter();
+      await runAdapterStdioServer(
+        (request) => bridge.handleRequest(request),
+        () => runtime.shutdown()
+      );
     });
+}
+
+function configureAdapterClaudeCodeCommand(root: Command): void {
+  root
+    .command("adapter-claude")
+    .description("Run Claude Code adapter bridge over stdio")
+    .action(async () => {
+      const runtime = new AdapterRuntime();
+      const bridge = new ClaudeCodeAdapterBridge(runtime);
+      await runAdapterStdioServer(
+        (request) => bridge.handleRequest(request),
+        () => runtime.shutdown()
+      );
+    });
+}
+
+async function runAdapterStdioServer(
+  handleRequest: (request: AdapterRequest) => Promise<unknown>,
+  shutdownRuntime: () => Promise<void>
+): Promise<void> {
+  const rl = createInterface({
+    input: process.stdin,
+    crlfDelay: Infinity
+  });
+  const pending = new Set<Promise<void>>();
+  let shutdownPromise: Promise<void> | null = null;
+
+  const writeResponse = (payload: unknown) => {
+    process.stdout.write(`${JSON.stringify(payload)}\n`);
+  };
+
+  const shutdownAdapter = async () => {
+    if (shutdownPromise) {
+      return shutdownPromise;
+    }
+
+    shutdownPromise = (async () => {
+      process.off("SIGINT", onSigInt);
+      process.off("SIGTERM", onSigTerm);
+
+      rl.close();
+      await Promise.allSettled([...pending]);
+      await shutdownRuntime().catch((error) => {
+        if (!isBenignShutdownError(error)) {
+          throw error;
+        }
+      });
+    })();
+
+    return shutdownPromise;
+  };
+
+  const onSigInt = () => {
+    void shutdownAdapter();
+  };
+  const onSigTerm = () => {
+    void shutdownAdapter();
+  };
+
+  process.on("SIGINT", onSigInt);
+  process.on("SIGTERM", onSigTerm);
+
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    let request: AdapterRequest;
+    try {
+      request = JSON.parse(trimmed) as AdapterRequest;
+    } catch (error) {
+      writeResponse({
+        ok: false,
+        error: {
+          message: `Invalid JSON request: ${error instanceof Error ? error.message : String(error)}`
+        }
+      });
+      continue;
+    }
+
+    let task: Promise<void>;
+    task = handleRequest(request)
+      .then((response) => {
+        writeResponse(response);
+      })
+      .catch((error) => {
+        writeResponse({
+          id: request.id,
+          ok: false,
+          error: {
+            message: error instanceof Error ? error.message : String(error)
+          }
+        });
+      })
+      .finally(() => {
+        pending.delete(task);
+      });
+    pending.add(task);
+  }
+
+  await shutdownAdapter();
 }
 
 function configureRunControlCommand(root: Command): void {

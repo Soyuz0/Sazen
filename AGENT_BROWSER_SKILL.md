@@ -105,6 +105,7 @@ Start server:
 ```bash
 npm run dev -- adapter-stdio
 npm run dev -- adapter-opencode
+npm run dev -- adapter-claude
 ```
 
 Send JSON lines:
@@ -125,6 +126,8 @@ Notes:
 - Use `adapterSessionId` for adapter calls; `runtimeSessionId`/`runtimeTabId` identify the underlying browser runtime entities.
 - Use `ping.sdkContractVersion` to verify compatibility with `src/sdk-contract.ts`.
 - `adapter-opencode` supports `oc.*` method aliases mapped onto the unified SDK contract methods.
+- `adapter-claude` supports `cc.*` aliases and slash command dispatch (`cc.command` with `command: "/browser/..."`).
+- `adapter-claude` responses use a stable envelope (`ok`, `status`, `data`, `error`, `meta`).
 
 ## Validation Loop (Required)
 

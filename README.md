@@ -129,8 +129,10 @@ When `run` or `loop` saves a trace (`--trace`), companion outputs are generated 
 ### External agent adapter
 - `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
 - `adapter-opencode`: OpenCode-oriented stdio bridge with `oc.*` method aliases.
+- `adapter-claude`: Claude Code-oriented stdio bridge with `cc.*` aliases and slash command mapping (`cc.command`, `/browser/...`).
 - Methods include session lifecycle, action execution, and run controls (`pauseSession`, `resumeSession`, `getSessionState`).
 - MCP-parity aliases are available (`session.pause`, `session.resume`, `session.state`).
+- Claude bridge responses use a stable envelope (`ok`, `status`, `data`, `error`, `meta`) with method mapping metadata.
 - Session identity fields are explicit in adapter responses:
   - `adapterSessionId`: adapter-facing handle used in method params.
   - `runtimeSessionId`: underlying browser runtime session identifier.
