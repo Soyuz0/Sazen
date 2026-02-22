@@ -3,6 +3,7 @@ export * from "./contracts.js";
 export * from "./snapshot.js";
 export * from "./observer.js";
 export * from "./session.js";
+export * from "./loop.js";
 export * from "./replay.js";
 export * from "./trace.js";
 export * from "./timeline-html.js";

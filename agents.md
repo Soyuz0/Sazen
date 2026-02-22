@@ -111,3 +111,11 @@ These rules define how autonomous agents should operate when using this browser 
 - Continue implementing planned scope iteratively without stopping at intermediate milestones.
 - Only pause for completion reporting after tests pass and no high-priority plan items remain for the current phase.
 - If the user explicitly says "don't stop until done", keep executing plan items and validations until a full pass is achieved.
+
+## 17) Current Workflow (Execution Order)
+- Start each tranche by reconciling `.plan` with actual code status; mark already-implemented items as completed/partial before adding new work.
+- Implement highest-priority remaining roadmap items first (P0 before P1/P2), then continue downward.
+- After code changes, update operational docs in the same tranche (`README.md`, `AGENT_BROWSER_SKILL.md`, `.plan`, and this file when workflow rules change).
+- Validate in this order unless a faster scoped check is clearly sufficient: `npm run build`, `npm test`, then `npm run smoke:sites -- --operation-timeout-ms 60000 --action-timeout-ms 30000 --stability-profile balanced`.
+- Treat a feature as done only when code + tests + docs + plan status are aligned and smoke coverage is green.
+- Commit and push each validated feature slice to `origin/master` (or active branch) before starting the next high-priority item.

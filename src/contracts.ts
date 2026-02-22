@@ -177,10 +177,45 @@ export const scriptSchema = z.object({
   actions: z.array(actionSchema).min(1)
 });
 
+const loopPredicateSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("snapshot"),
+    field: z.enum(["url", "title", "domHash", "nodeCount", "interactiveCount"]),
+    operator: z.enum(["contains", "equals", "not_equals", "gt", "gte", "lt", "lte"]),
+    value: z.union([z.string(), z.number()]),
+    negate: z.boolean().optional()
+  }),
+  z.object({
+    kind: z.literal("assert"),
+    condition: assertConditionSchema,
+    timeoutMs: z.number().int().positive().optional(),
+    negate: z.boolean().optional()
+  })
+]);
+
+const loopBranchSchema = z.object({
+  label: z.string().min(1).optional(),
+  match: z.enum(["all", "any"]).optional(),
+  when: z.array(loopPredicateSchema).optional(),
+  actions: z.array(actionSchema).optional(),
+  next: z.enum(["continue", "break"]).optional()
+});
+
+export const loopScriptSchema = z.object({
+  settings: scriptSchema.shape.settings,
+  setupActions: z.array(actionSchema).optional(),
+  stepAction: actionSchema,
+  branches: z.array(loopBranchSchema).min(1),
+  maxIterations: z.number().int().positive().optional(),
+  continueOnStepError: z.boolean().optional(),
+  captureObservationSnapshot: z.boolean().optional()
+});
+
 export const cliActionSchema = z.union([actionSchema, z.array(actionSchema)]);
 
 export type ParsedAction = z.infer<typeof actionSchema>;
 export type ParsedScript = z.infer<typeof scriptSchema>;
+export type ParsedLoopScript = z.infer<typeof loopScriptSchema>;
 
 export function parseAction(raw: unknown): ParsedAction {
   return actionSchema.parse(raw);
@@ -188,4 +223,8 @@ export function parseAction(raw: unknown): ParsedAction {
 
 export function parseScript(raw: unknown): ParsedScript {
   return scriptSchema.parse(raw);
+}
+
+export function parseLoopScript(raw: unknown): ParsedLoopScript {
+  return loopScriptSchema.parse(raw);
 }

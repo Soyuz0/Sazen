@@ -462,6 +462,69 @@ export interface ActionScript {
   actions: Action[];
 }
 
+export type LoopPredicate =
+  | {
+      kind: "snapshot";
+      field: "url" | "title" | "domHash" | "nodeCount" | "interactiveCount";
+      operator: "contains" | "equals" | "not_equals" | "gt" | "gte" | "lt" | "lte";
+      value: string | number;
+      negate?: boolean;
+    }
+  | {
+      kind: "assert";
+      condition: AssertCondition;
+      timeoutMs?: number;
+      negate?: boolean;
+    };
+
+export interface LoopBranch {
+  label?: string;
+  match?: "all" | "any";
+  when?: LoopPredicate[];
+  actions?: Action[];
+  next?: "continue" | "break";
+}
+
+export interface LoopScript {
+  settings?: Partial<AgentSessionOptions>;
+  setupActions?: Action[];
+  stepAction: Action;
+  branches: LoopBranch[];
+  maxIterations?: number;
+  continueOnStepError?: boolean;
+  captureObservationSnapshot?: boolean;
+}
+
+export interface LoopPredicateResult {
+  kind: LoopPredicate["kind"];
+  passed: boolean;
+  negate: boolean;
+  detail: string;
+}
+
+export interface LoopBranchResult {
+  label: string;
+  matched: boolean;
+  matchMode: "all" | "any";
+  predicates: LoopPredicateResult[];
+}
+
+export interface LoopIterationResult {
+  iteration: number;
+  stepResult: ActionResult;
+  branchResults: LoopBranchResult[];
+  selectedBranchLabel?: string;
+  selectedBranchNext?: "continue" | "break";
+  selectedBranchActionResults: ActionResult[];
+  observationSnapshot?: DomSnapshot;
+}
+
+export interface LoopRunReport {
+  maxIterations: number;
+  iterations: LoopIterationResult[];
+  stopReason: "branch_break" | "no_branch_match" | "max_iterations" | "step_error";
+}
+
 export interface ReplayReport {
   tracePath: string;
   mode: ReplayMode;

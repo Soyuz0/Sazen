@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loop Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: "Segoe UI", sans-serif;
+        background: linear-gradient(160deg, #f8fafc 0%, #e2e8f0 100%);
+        color: #0f172a;
+      }
+
+      main {
+        background: white;
+        border: 1px solid #cbd5e1;
+        border-radius: 14px;
+        padding: 20px;
+        width: min(460px, calc(100vw - 40px));
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 16px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 14px;
+        background: #0ea5e9;
+        color: #082f49;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      #status {
+        margin-top: 14px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Loop Counter Fixture</h1>
+      <p>Increment until status reaches done.</p>
+
+      <div class="row">
+        <button id="increment" type="button">Increment</button>
+        <span id="count">0</span>
+      </div>
+
+      <p id="status">status: running</p>
+    </main>
+
+    <script>
+      const button = document.querySelector("#increment");
+      const countNode = document.querySelector("#count");
+      const statusNode = document.querySelector("#status");
+
+      let count = 0;
+      button.addEventListener("click", () => {
+        count += 1;
+        countNode.textContent = String(count);
+        const done = count >= 3;
+        statusNode.textContent = done ? `status: done (${count})` : `status: running (${count})`;
+      });
+    </script>
+  </body>
+</html>

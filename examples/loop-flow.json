@@ -1,0 +1,41 @@
+{
+  "settings": {
+    "headed": false,
+    "deterministic": true,
+    "captureScreenshots": false
+  },
+  "setupActions": [
+    {
+      "type": "navigate",
+      "url": "http://127.0.0.1:4173/loop.html"
+    }
+  ],
+  "stepAction": {
+    "type": "click",
+    "target": {
+      "kind": "css",
+      "selector": "#increment"
+    }
+  },
+  "maxIterations": 6,
+  "branches": [
+    {
+      "label": "done",
+      "when": [
+        {
+          "kind": "assert",
+          "condition": {
+            "kind": "selector",
+            "selector": "#status",
+            "textContains": "done"
+          }
+        }
+      ],
+      "next": "break"
+    },
+    {
+      "label": "keep-going",
+      "next": "continue"
+    }
+  ]
+}

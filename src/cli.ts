@@ -7,7 +7,8 @@ import process from "node:process";
 import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { AdapterRuntime, type AdapterRequest } from "./adapter.js";
-import { cliActionSchema, parseScript } from "./contracts.js";
+import { cliActionSchema, parseLoopScript, parseScript } from "./contracts.js";
+import { runLoop } from "./loop.js";
 import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
 import { AgentSession } from "./session.js";
@@ -26,6 +27,7 @@ program
 configureOpenCommand(program);
 configureInspectCommand(program);
 configureRunCommand(program);
+configureLoopCommand(program);
 configureActionCommand(program);
 configureSnapshotCommand(program);
 configureDescribeCommand(program);
@@ -260,6 +262,102 @@ function configureRunCommand(root: Command): void {
         if (runControl) {
           await runControl.close();
         }
+        await safeCloseSession(session);
+      }
+    });
+}
+
+function configureLoopCommand(root: Command): void {
+  root
+    .command("loop")
+    .description("Run loop script (action -> observe -> branch)")
+    .argument("<loopPath>", "Path to loop script JSON")
+    .option("--headless", "Run Chromium headless", false)
+    .option("--no-deterministic", "Disable deterministic mode")
+    .option("--slowmo <ms>", "Playwright slow motion delay in ms")
+    .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
+    .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
+    .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
+    .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
+    .option("--raw-logs", "Disable log noise filtering", false)
+    .option("--trace <path>", "Write trace JSON to this path")
+    .option("--save <name>", "Save session on completion")
+    .option("--logs", "Print captured events for loop actions", false)
+    .option("--max-iterations <n>", "Override script max iterations")
+    .action(async (loopPath: string, options: Record<string, string | boolean>) => {
+      const absolutePath = resolve(loopPath);
+      const raw = await readFile(absolutePath, "utf8");
+      const script = parseLoopScript(JSON.parse(raw));
+      const maxIterationsOverride = toOptionalNumber(options.maxIterations);
+
+      const session = new AgentSession({
+        ...script.settings,
+        ...toSessionOptions(options)
+      });
+
+      await session.start();
+
+      try {
+        const report = await runLoop(session, {
+          ...script,
+          maxIterations:
+            typeof maxIterationsOverride === "number" && maxIterationsOverride > 0
+              ? maxIterationsOverride
+              : script.maxIterations
+        });
+
+        console.log(`Loop stop reason: ${report.stopReason}`);
+        console.log(`Iterations: ${report.iterations.length}/${report.maxIterations}`);
+
+        for (const iteration of report.iterations) {
+          console.log(`\nIteration ${iteration.iteration}`);
+          printActionResult(iteration.stepResult, Boolean(options.logs));
+
+          if (iteration.observationSnapshot) {
+            console.log(
+              `observe: url=${truncate(iteration.observationSnapshot.url, 70)} hash=${iteration.observationSnapshot.domHash} nodes=${iteration.observationSnapshot.nodeCount} interactive=${iteration.observationSnapshot.interactiveCount}`
+            );
+          }
+
+          for (const branch of iteration.branchResults) {
+            const marker = branch.matched ? "*" : "-";
+            const detail =
+              branch.predicates.length > 0
+                ? branch.predicates
+                    .map((predicate) => `${predicate.passed ? "pass" : "fail"}:${truncate(predicate.detail, 90)}`)
+                    .join(" | ")
+                : "(no predicates)";
+            console.log(`  ${marker} branch ${branch.label} [${branch.matchMode}] ${detail}`);
+          }
+
+          if (iteration.selectedBranchLabel) {
+            console.log(
+              `selected: ${iteration.selectedBranchLabel} next=${iteration.selectedBranchNext ?? "continue"} actions=${iteration.selectedBranchActionResults.length}`
+            );
+          } else {
+            console.log("selected: (none)");
+          }
+
+          for (const actionResult of iteration.selectedBranchActionResults) {
+            printActionResult(actionResult, Boolean(options.logs));
+          }
+        }
+
+        if (typeof options.trace === "string" && options.trace.length > 0) {
+          const tracePath = await session.saveTrace(options.trace);
+          console.log(`\nSaved trace -> ${tracePath}`);
+        }
+
+        if (typeof options.save === "string" && options.save.length > 0) {
+          const manifestPath = await session.saveSession(options.save);
+          console.log(`Saved session -> ${manifestPath}`);
+        }
+
+        if (report.stopReason === "step_error" || report.stopReason === "no_branch_match") {
+          process.exitCode = 2;
+        }
+      } finally {
         await safeCloseSession(session);
       }
     });

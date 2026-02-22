@@ -99,6 +99,7 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 
 ### Execution commands
 - `run <script.json>`: execute action script.
+- `loop <loop.json>`: execute action -> observe -> branch loop script.
 - `run-control <command>`: send `pause|resume|state` to a running script via control socket.
 - `act <json|@file>`: execute one or many actions.
 - `snapshot <url>`: print token-optimized snapshot JSON.
@@ -164,6 +165,49 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
   - `timeout`: resume after `timeoutMs`
   - `enter`: wait for Enter (or timeout fallback)
 - Result metadata includes `pauseSummary` with elapsed time and whether URL/DOM changed during pause.
+
+### Loop script format
+
+Loop scripts support repeated **action -> observe -> branch** execution with optional max iteration limits.
+
+```json
+{
+  "settings": {
+    "headed": false,
+    "deterministic": true
+  },
+  "setupActions": [
+    { "type": "navigate", "url": "http://127.0.0.1:4173/loop.html" }
+  ],
+  "stepAction": {
+    "type": "click",
+    "target": { "kind": "css", "selector": "#increment" }
+  },
+  "maxIterations": 6,
+  "branches": [
+    {
+      "label": "done",
+      "when": [
+        {
+          "kind": "assert",
+          "condition": { "kind": "selector", "selector": "#status", "textContains": "done" }
+        }
+      ],
+      "next": "break"
+    },
+    {
+      "label": "keep-going",
+      "next": "continue"
+    }
+  ]
+}
+```
+
+- Predicate kinds:
+  - `assert`: reuses existing assert conditions (`selector`, `url_contains`, etc.)
+  - `snapshot`: evaluate snapshot fields (`url`, `title`, `domHash`, `nodeCount`, `interactiveCount`)
+- Branches are evaluated in order; first match wins.
+- `next`: `continue` (default) or `break`.
 
 ### Run-level control + provenance
 - `run --control-socket <path>` starts a local control socket for external pause/resume/state commands.
@@ -306,6 +350,7 @@ npm run dev -- run-control resume --socket reports/runtime-logs/run-control.sock
 
 - Local fixture login flow: `examples/sample-flow.json`
 - Consent wall flow: `examples/consent-flow.json`
+- Loop runner flow: `examples/loop-flow.json`
 - Public multi-site flows: `examples/site-flows/*.json`
 
 ---
@@ -327,6 +372,7 @@ npm run smoke:sites -- --operation-timeout-ms 60000 --action-timeout-ms 30000 --
 
 Implemented now:
 - action runtime + structured snapshots/diffs/events
+- loop runtime (action -> observe -> branch)
 - replay/flake/timeline/timeline-html/bundle/visual-diff
 - assertion DSL, consent helper, profiles, stability modes
 - annotated per-action screenshots

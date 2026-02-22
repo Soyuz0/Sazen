@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAction, parseScript } from "../src/contracts.js";
+import { parseAction, parseLoopScript, parseScript } from "../src/contracts.js";
 
 describe("contracts", () => {
   it("parses a valid action script", () => {
@@ -125,5 +125,72 @@ describe("contracts", () => {
       note: "manual-check"
     });
     expect(pauseAction.type).toBe("pause");
+  });
+
+  it("parses loop scripts with snapshot and assert predicates", () => {
+    const parsed = parseLoopScript({
+      settings: {
+        headed: false,
+        deterministic: true
+      },
+      setupActions: [
+        {
+          type: "navigate",
+          url: "https://example.com"
+        }
+      ],
+      stepAction: {
+        type: "click",
+        target: {
+          kind: "css",
+          selector: "button"
+        }
+      },
+      maxIterations: 6,
+      branches: [
+        {
+          label: "stop",
+          when: [
+            {
+              kind: "snapshot",
+              field: "url",
+              operator: "contains",
+              value: "done"
+            }
+          ],
+          next: "break"
+        },
+        {
+          label: "continue",
+          when: [
+            {
+              kind: "assert",
+              condition: {
+                kind: "selector",
+                selector: "button",
+                state: "visible"
+              },
+              negate: false
+            }
+          ],
+          actions: [
+            {
+              type: "waitFor",
+              condition: {
+                kind: "timeout",
+                ms: 20
+              }
+            }
+          ],
+          next: "continue"
+        }
+      ]
+    });
+
+    expect(parsed.maxIterations).toBe(6);
+    expect(parsed.stepAction.type).toBe("click");
+    expect(parsed.branches).toHaveLength(2);
+    expect(parsed.branches[0].when?.[0].kind).toBe("snapshot");
+    expect(parsed.branches[1].when?.[0].kind).toBe("assert");
   });
 });

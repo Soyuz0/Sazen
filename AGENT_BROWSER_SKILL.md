@@ -26,6 +26,12 @@ npm test
 npm run dev -- run examples/sample-flow.json --trace traces/sample-trace.json --live-timeline
 ```
 
+Loop mode (action -> observe -> branch):
+
+```bash
+npm run dev -- loop examples/loop-flow.json --trace traces/loop-trace.json
+```
+
 Optional long-run control socket:
 
 ```bash
@@ -46,6 +52,7 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 ## Agent Workflow
 
 - Prefer `run` with JSON scripts over ad-hoc manual action chains.
+- Use `loop` for bounded iterative workflows that need predicate-based branching.
 - Keep deterministic mode enabled unless explicitly diagnosing runtime drift.
 - Use semantic targets first (`roleName`, `stableRef`, `node`) and CSS only as fallback.
 - If strict replay mismatches on public/dynamic pages, retry with relaxed replay + selector invariants.
