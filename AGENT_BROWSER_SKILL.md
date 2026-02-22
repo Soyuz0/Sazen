@@ -69,6 +69,7 @@ Use timeline HTML presets and diff-only focus mode for long traces when narrowin
 - Use `waitFor` with `condition.kind = network_response` when synchronizing on API responses (URL/method/status/body) instead of only DOM heuristics.
 - Use bounded retries (`maxActionAttempts`, `retryBackoffMs`) for transient timeout/network flake; inspect `result.retry` attempt evidence before changing selectors.
 - Use `checkpoint` actions on long scripts and recover with `run --resume-from-checkpoint <name>` when failures occur mid-flow.
+- Use `handleLogin` when site plugin selectors are available (`siteAdapter`) before hand-authoring login fill/click chains.
 - If strict replay mismatches on public/dynamic pages, retry with relaxed replay + selector invariants.
 - For unstable traces, run `flake` before changing selectors.
 
@@ -91,6 +92,11 @@ Use timeline HTML presets and diff-only focus mode for long traces when narrowin
 - `handleConsent` supports `strategy` (`auto|cmp|generic`), `region` (`auto|global|eu|us|uk`), and optional `siteAdapter` host hint.
 - Use `strategy: auto` for mixed CMP + site-specific matching; use `cmp` when debugging common CMP frameworks directly.
 - Consent resolution is plugin-registry based (site adapter plugin, CMP plugin, generic plugin in deterministic priority order).
+
+## Login Strategy Hooks
+
+- `handleLogin` uses the same registry core with ordered site plugin + generic fallback resolution.
+- Initial login plugin coverage includes GitHub-style selectors.
 
 ## Adapter Runtime (`adapter-stdio`)
 

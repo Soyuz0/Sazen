@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultPluginRegistry, PluginRegistry, resolveConsentHooksWithRegistry } from "../src/plugin-registry.js";
+import {
+  createDefaultPluginRegistry,
+  PluginRegistry,
+  resolveConsentHooksWithRegistry,
+  resolveLoginHooksWithRegistry
+} from "../src/plugin-registry.js";
 
 describe("plugin registry", () => {
   it("resolves consent hooks through ordered site/cmp/generic plugins", () => {
@@ -41,9 +46,29 @@ describe("plugin registry", () => {
       kind: "login",
       id: "login.github",
       priority: 10,
-      supports: ({ host }) => host.endsWith("github.com")
+      supports: ({ host }) => host.endsWith("github.com"),
+      resolve: () => ({
+        usernameSelectors: ["input[name='login']"],
+        passwordSelectors: ["input[name='password']"],
+        submitSelectors: ["button[type='submit']"]
+      })
     });
 
     expect(registry.listLoginPluginIds()).toEqual(["login.github"]);
+  });
+
+  it("resolves login hooks using site plugin and generic fallback", () => {
+    const resolved = resolveLoginHooksWithRegistry({
+      strategy: "auto",
+      siteAdapter: "github.com",
+      url: "https://github.com/login"
+    });
+
+    expect(resolved.adapterLabel).toBe("site:github.com");
+    expect(resolved.pluginIds).toContain("login.site.github");
+    expect(resolved.pluginIds).toContain("login.generic");
+    expect(resolved.usernameSelectors.length).toBeGreaterThan(0);
+    expect(resolved.passwordSelectors.length).toBeGreaterThan(0);
+    expect(resolved.submitSelectors.length).toBeGreaterThan(0);
   });
 });

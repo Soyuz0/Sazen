@@ -133,6 +133,14 @@ const actionSchemaCore = z.discriminatedUnion("type", [
     region: z.enum(["auto", "global", "eu", "us", "uk"]).optional()
   }),
   actionBaseSchema.extend({
+    type: z.literal("handleLogin"),
+    username: z.string().min(1),
+    password: z.string(),
+    strategy: z.enum(["auto", "generic", "site"]).optional(),
+    siteAdapter: z.string().min(1).optional(),
+    requireFound: z.boolean().optional()
+  }),
+  actionBaseSchema.extend({
     type: z.literal("waitFor"),
     condition: waitConditionSchema
   }),

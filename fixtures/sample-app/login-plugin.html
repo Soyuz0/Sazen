@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login Plugin Fixture</title>
+  </head>
+  <body>
+    <h1>Login Plugin Fixture</h1>
+    <form id="login-form">
+      <label>
+        Username
+        <input id="login_field" name="login" autocomplete="username" />
+      </label>
+      <label>
+        Password
+        <input id="password" name="password" type="password" autocomplete="current-password" />
+      </label>
+      <input type="submit" name="commit" value="Sign in" />
+    </form>
+    <p id="login-state">signed-out</p>
+
+    <script>
+      const form = document.getElementById("login-form");
+      const state = document.getElementById("login-state");
+
+      form?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const username = String(document.getElementById("login_field")?.value || "");
+        if (state) {
+          state.textContent = `signed-in ${username}`;
+        }
+      });
+    </script>
+  </body>
+</html>

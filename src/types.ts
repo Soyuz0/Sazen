@@ -253,6 +253,16 @@ export interface HandleConsentAction {
   timeoutMs?: number;
 }
 
+export interface HandleLoginAction {
+  type: "handleLogin";
+  username: string;
+  password: string;
+  strategy?: "auto" | "generic" | "site";
+  siteAdapter?: string;
+  requireFound?: boolean;
+  timeoutMs?: number;
+}
+
 export type WaitCondition =
   | {
       kind: "timeout";
@@ -332,6 +342,7 @@ export type Action =
   | PauseAction
   | AssertAction
   | HandleConsentAction
+  | HandleLoginAction
   | WaitForAction
   | SnapshotAction
   | SetViewportAction

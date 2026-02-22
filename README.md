@@ -42,7 +42,7 @@ npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 ## What This Project Does
 
 ### For agents
-- Executes atomic actions (`navigate`, `click`, `fill`, `assert`, `handleConsent`, etc.).
+- Executes atomic actions (`navigate`, `click`, `fill`, `assert`, `handleConsent`, `handleLogin`, etc.).
 - Returns structured post-action output (status, DOM diff, events, timings, screenshots).
 - Supports deterministic replay (`strict` and `relaxed` modes) and flake detection.
 - Auto-publishes latest screenshot artifacts into `.agent-browser/context/` for feedback-loop consumption.
@@ -349,6 +349,22 @@ Loop scripts support repeated **action -> observe -> branch** execution with opt
 - `siteAdapter`: optional hostname hint for site-specific selectors.
 - Consent matching now resolves through a plugin registry (ordered site adapter, CMP, then generic plugins).
 
+### Login helper
+
+```json
+{
+  "type": "handleLogin",
+  "username": "agent@example.com",
+  "password": "supersecret",
+  "strategy": "site",
+  "siteAdapter": "github.com",
+  "requireFound": true
+}
+```
+
+- Login matching resolves through the same plugin registry core (site plugins + generic fallback).
+- Initial login plugin pack includes GitHub-style selectors and a generic form fallback.
+
 ---
 
 ## Runtime/CLI Configuration
@@ -505,7 +521,7 @@ Implemented now:
 - bounded action auto-retry policy with per-attempt evidence + final rationale in traces
 - cross-run drift monitor aggregation and recommendation reporting
 - plugin registry core for consent/login adapter composition (consent plugins active)
+- initial login plugin pack via registry-backed `handleLogin`
 
 Planned (tracked in `.plan`):
-- initial login plugin pack on top of registry core
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

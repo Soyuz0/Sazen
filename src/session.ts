@@ -10,7 +10,7 @@ import {
   installLayoutShiftCapture
 } from "./deterministic.js";
 import { BrowserObserver, collectPerformanceMetrics } from "./observer.js";
-import { resolveConsentHooksWithRegistry } from "./plugin-registry.js";
+import { resolveConsentHooksWithRegistry, resolveLoginHooksWithRegistry } from "./plugin-registry.js";
 import { diffSnapshots, takeDomSnapshot } from "./snapshot.js";
 import { comparePngFiles } from "./visual.js";
 import type {
@@ -819,6 +819,11 @@ export class AgentSession {
         return {};
       }
 
+      case "handleLogin": {
+        await this.handleLogin(action);
+        return {};
+      }
+
       case "waitFor": {
         await this.runWaitCondition(action.condition, action.timeoutMs);
         return {};
@@ -1256,6 +1261,151 @@ export class AgentSession {
         `No consent control found for mode '${mode}' within ${timeout}ms (region=${region}, adapter=${adapterHints.adapterLabel})`
       );
     }
+  }
+
+  private async handleLogin(action: Extract<Action, { type: "handleLogin" }>): Promise<void> {
+    const page = this.requirePage();
+    const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
+    const strategy = action.strategy ?? "auto";
+
+    const hooks = resolveLoginHooksWithRegistry({
+      strategy,
+      siteAdapter: action.siteAdapter,
+      url: safePageUrl(page, "")
+    });
+
+    const deadline = Date.now() + timeout;
+    const usernameFilled = await this.fillFirstVisibleSelectorValue(
+      page,
+      hooks.usernameSelectors,
+      action.username,
+      deadline
+    );
+    const passwordFilled = await this.fillFirstVisibleSelectorValue(
+      page,
+      hooks.passwordSelectors,
+      action.password,
+      deadline
+    );
+
+    let submitted = await this.clickFirstVisibleRoleName(page, hooks.submitNamePatterns, deadline);
+    if (!submitted) {
+      submitted = await this.clickFirstVisibleSelector(page, hooks.submitSelectors, deadline);
+    }
+    if (!submitted && usernameFilled && passwordFilled) {
+      try {
+        await page.keyboard.press("Enter");
+        submitted = true;
+      } catch {
+        submitted = false;
+      }
+    }
+
+    if (usernameFilled && passwordFilled && submitted) {
+      return;
+    }
+
+    if (action.requireFound) {
+      throw new Error(
+        `No login controls found within ${timeout}ms (adapter=${hooks.adapterLabel}, strategy=${strategy}, plugins=${hooks.pluginIds.join(",") || "none"})`
+      );
+    }
+  }
+
+  private async fillFirstVisibleSelectorValue(
+    page: Page,
+    selectors: string[],
+    value: string,
+    deadline: number
+  ): Promise<boolean> {
+    for (const selector of selectors) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        return false;
+      }
+
+      const locator = page.locator(selector).first();
+      try {
+        const count = await locator.count();
+        if (count <= 0) {
+          continue;
+        }
+        const visible = await locator.isVisible().catch(() => false);
+        if (!visible) {
+          continue;
+        }
+
+        await locator.fill(value, {
+          timeout: Math.max(250, Math.min(1_500, remaining))
+        });
+        return true;
+      } catch {
+        // Try next selector candidate.
+      }
+    }
+
+    return false;
+  }
+
+  private async clickFirstVisibleSelector(page: Page, selectors: string[], deadline: number): Promise<boolean> {
+    for (const selector of selectors) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        return false;
+      }
+
+      const locator = page.locator(selector).first();
+      try {
+        const count = await locator.count();
+        if (count <= 0) {
+          continue;
+        }
+        const visible = await locator.isVisible().catch(() => false);
+        if (!visible) {
+          continue;
+        }
+
+        await locator.click({
+          timeout: Math.max(250, Math.min(1_500, remaining))
+        });
+        return true;
+      } catch {
+        // Try next selector candidate.
+      }
+    }
+
+    return false;
+  }
+
+  private async clickFirstVisibleRoleName(
+    page: Page,
+    patterns: RegExp[],
+    deadline: number
+  ): Promise<boolean> {
+    for (const pattern of patterns) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        return false;
+      }
+
+      try {
+        const button = page.getByRole("button", { name: pattern }).first();
+        if (await button.isVisible().catch(() => false)) {
+          await button.click({ timeout: Math.max(250, Math.min(1_500, remaining)) });
+          return true;
+        }
+
+        const link = page.getByRole("link", { name: pattern }).first();
+        if (await link.isVisible().catch(() => false)) {
+          await link.click({ timeout: Math.max(250, Math.min(1_500, remaining)) });
+          return true;
+        }
+      } catch {
+        // Try next pattern.
+      }
+    }
+
+    return false;
   }
 
   private async runPauseAction(action: Extract<Action, { type: "pause" }>): Promise<number> {

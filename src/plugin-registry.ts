@@ -20,17 +20,41 @@ export interface ConsentPlugin {
   resolve: (context: ConsentPluginContext) => ConsentPluginResult;
 }
 
+export interface LoginPluginContext {
+  strategy: "auto" | "generic" | "site";
+  siteAdapter?: string;
+  url: string;
+  host: string;
+}
+
+export interface LoginPluginResult {
+  usernameSelectors?: string[];
+  passwordSelectors?: string[];
+  submitSelectors?: string[];
+  submitNamePatterns?: RegExp[];
+}
+
 export interface LoginPlugin {
   kind: "login";
   id: string;
   priority: number;
-  supports: (context: { url: string; host: string; siteAdapter?: string }) => boolean;
+  supports: (context: LoginPluginContext) => boolean;
+  resolve: (context: LoginPluginContext) => LoginPluginResult;
 }
 
 export interface ResolvedConsentHooks {
   adapterLabel: string;
   namePatterns: RegExp[];
   selectors: string[];
+  pluginIds: string[];
+}
+
+export interface ResolvedLoginHooks {
+  adapterLabel: string;
+  usernameSelectors: string[];
+  passwordSelectors: string[];
+  submitSelectors: string[];
+  submitNamePatterns: RegExp[];
   pluginIds: string[];
 }
 
@@ -75,6 +99,43 @@ export class PluginRegistry {
     };
   }
 
+  resolveLogin(context: LoginPluginContext): ResolvedLoginHooks {
+    const usernameSelectors: string[] = [];
+    const passwordSelectors: string[] = [];
+    const submitSelectors: string[] = [];
+    const submitNamePatterns: RegExp[] = [];
+    const matchedPluginIds: string[] = [];
+
+    for (const plugin of this.loginPlugins) {
+      if (!plugin.supports(context)) {
+        continue;
+      }
+      const output = plugin.resolve(context);
+      matchedPluginIds.push(plugin.id);
+      if (output.usernameSelectors) {
+        usernameSelectors.push(...output.usernameSelectors);
+      }
+      if (output.passwordSelectors) {
+        passwordSelectors.push(...output.passwordSelectors);
+      }
+      if (output.submitSelectors) {
+        submitSelectors.push(...output.submitSelectors);
+      }
+      if (output.submitNamePatterns) {
+        submitNamePatterns.push(...output.submitNamePatterns);
+      }
+    }
+
+    return {
+      adapterLabel: deriveLoginAdapterLabel(context, matchedPluginIds),
+      usernameSelectors: dedupeStringList(usernameSelectors),
+      passwordSelectors: dedupeStringList(passwordSelectors),
+      submitSelectors: dedupeStringList(submitSelectors),
+      submitNamePatterns: dedupeRegexList(submitNamePatterns),
+      pluginIds: matchedPluginIds
+    };
+  }
+
   listLoginPluginIds(): string[] {
     return this.loginPlugins.map((plugin) => plugin.id);
   }
@@ -114,6 +175,44 @@ export function createDefaultPluginRegistry(): PluginRegistry {
     })
   });
 
+  registry.registerLoginPlugin({
+    kind: "login",
+    id: "login.site.github",
+    priority: 100,
+    supports: (context) => {
+      const host = context.host;
+      const adapter = context.siteAdapter ?? "";
+      if (context.strategy === "generic") {
+        return false;
+      }
+      return adapter === "github.com" || host === "github.com" || host.endsWith(".github.com");
+    },
+    resolve: () => ({
+      usernameSelectors: ["input#login_field", "input[name='login']", "input[name='username']"],
+      passwordSelectors: ["input#password", "input[name='password']"],
+      submitSelectors: ["input[type='submit'][name='commit']", "button[name='commit']", "button[type='submit']"],
+      submitNamePatterns: [/sign in/i, /log in/i]
+    })
+  });
+
+  registry.registerLoginPlugin({
+    kind: "login",
+    id: "login.generic",
+    priority: 300,
+    supports: (context) => context.strategy !== "site",
+    resolve: () => ({
+      usernameSelectors: [
+        "input[name='username']",
+        "input[name='email']",
+        "input[type='email']",
+        "input[autocomplete='username']"
+      ],
+      passwordSelectors: ["input[name='password']", "input[type='password']", "input[autocomplete='current-password']"],
+      submitSelectors: ["button[type='submit']", "input[type='submit']"],
+      submitNamePatterns: [/sign in/i, /log in/i, /continue/i]
+    })
+  });
+
   return registry;
 }
 
@@ -127,6 +226,17 @@ export function resolveConsentHooksWithRegistry(input: {
   region: "global" | "eu" | "us" | "uk";
 }): ResolvedConsentHooks {
   return DEFAULT_PLUGIN_REGISTRY.resolveConsent({
+    ...input,
+    host: getHostFromUrl(input.url)
+  });
+}
+
+export function resolveLoginHooksWithRegistry(input: {
+  strategy: "auto" | "generic" | "site";
+  siteAdapter?: string;
+  url: string;
+}): ResolvedLoginHooks {
+  return DEFAULT_PLUGIN_REGISTRY.resolveLogin({
     ...input,
     host: getHostFromUrl(input.url)
   });
@@ -146,6 +256,16 @@ function deriveConsentAdapterLabel(context: ConsentPluginContext, pluginIds: str
     return "cmp";
   }
   return "generic";
+}
+
+function deriveLoginAdapterLabel(context: LoginPluginContext, pluginIds: string[]): string {
+  if (pluginIds.includes("login.site.github")) {
+    return "site:github.com";
+  }
+  if (pluginIds.includes("login.generic")) {
+    return "generic";
+  }
+  return `site:${context.siteAdapter || context.host || "unknown"}`;
 }
 
 function cmpSelectorsForMode(mode: "accept" | "reject"): string[] {

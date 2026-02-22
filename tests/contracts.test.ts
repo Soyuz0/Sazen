@@ -139,6 +139,20 @@ describe("contracts", () => {
       expect(consentAction.siteAdapter).toBe("github.com");
     }
 
+    const loginAction = parseAction({
+      type: "handleLogin",
+      username: "agent@example.com",
+      password: "secret",
+      strategy: "site",
+      siteAdapter: "github.com",
+      requireFound: true
+    });
+    expect(loginAction.type).toBe("handleLogin");
+    if (loginAction.type === "handleLogin") {
+      expect(loginAction.strategy).toBe("site");
+      expect(loginAction.siteAdapter).toBe("github.com");
+    }
+
     const bboxAssert = parseAction({
       type: "assert",
       condition: {

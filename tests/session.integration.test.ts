@@ -503,6 +503,50 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("handles login actions through registry-backed login plugins", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-login-plugin-"));
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      const nav = await session.perform({
+        type: "navigate",
+        url: `${fixture.baseUrl}/login-plugin.html`
+      });
+      expect(nav.status).toBe("ok");
+
+      const login = await session.perform({
+        type: "handleLogin",
+        username: "agent@example.com",
+        password: "supersecret",
+        strategy: "site",
+        siteAdapter: "github.com",
+        requireFound: true
+      });
+      expect(login.status).toBe("ok");
+
+      const assertState = await session.perform({
+        type: "assert",
+        condition: {
+          kind: "selector",
+          selector: "#login-state",
+          state: "visible",
+          textContains: "signed-in agent@example.com"
+        }
+      });
+      expect(assertState.status).toBe("ok");
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("supports network-aware waitFor predicates on url/status/body", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-network-wait-"));
 
