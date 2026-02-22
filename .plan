@@ -102,6 +102,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented selector health reporting (`selector-health`) with fallback/ambiguity/timeout metrics and target hotspots.
 - Implemented canonical run artifact indexing (`run-index`) linking trace, timeline HTML, screenshots, visual diffs, bundle manifests, and top errors.
 - Implemented network-aware wait primitives (`waitFor` + `network_response`) with URL/method/status/body predicates.
+- Implemented bounded action auto-retry policy with per-attempt evidence and final retry rationale (`maxActionAttempts`, `retryBackoffMs`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -214,7 +215,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **P1 - Completed: Selector health report** with trace-driven fallback/ambiguity/timeout metrics and per-target hotspots.
 - **P1 - Completed: Artifact manifest index** via `run-index` JSON + bundle-linked run index snapshots.
 - **P1 - Completed: Network-aware wait primitives** via `waitFor.condition.kind = network_response` with URL/method/status/body predicates.
-- **P2 - Auto-retry with evidence policy (Medium impact, Medium effort):** optional bounded retries that persist per-attempt evidence and a final retry rationale.
+- **P2 - Completed: Auto-retry with evidence policy** via bounded retries and persisted per-attempt evidence/final rationale in action results, timeline rows, and trace records.
 - **P2 - Session identity clarity in adapter responses (Medium impact, Low effort):** standardize and document adapter `sessionId` vs runtime `sessionId` fields to avoid client confusion.
 - **P2 - Checkpoint/resume for long flows (Medium impact, High effort):** named checkpoints in scripts with resume-from-checkpoint support after failures.
 - **P3 - Cross-site drift monitor (Medium impact, High effort):** aggregate recurring smoke failures and auto-suggest selector strategy updates.

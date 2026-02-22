@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Retry Assert Fixture</title>
+    <style>
+      #late-indicator {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Retry Assert Fixture</h1>
+    <p id="state">booting</p>
+    <button id="trigger" type="button">Trigger ready</button>
+    <div id="late-indicator">ready</div>
+
+    <script>
+      let started = false;
+      const trigger = document.getElementById("trigger");
+
+      trigger?.addEventListener("click", () => {
+        if (started) {
+          return;
+        }
+        started = true;
+
+        window.setTimeout(() => {
+          const indicator = document.getElementById("late-indicator");
+          const state = document.getElementById("state");
+          if (indicator) {
+            indicator.style.display = "block";
+          }
+          if (state) {
+            state.textContent = "ready";
+          }
+        }, 320);
+      });
+    </script>
+  </body>
+</html>

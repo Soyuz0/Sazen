@@ -14,7 +14,9 @@ describe("contracts", () => {
         viewportWidth: 1280,
         viewportHeight: 800,
         maxInterventionsRetained: 3,
-        interventionRetentionMode: "severity"
+        interventionRetentionMode: "severity",
+        maxActionAttempts: 3,
+        retryBackoffMs: 120
       },
       actions: [
         {
@@ -39,10 +41,27 @@ describe("contracts", () => {
     expect(parsed.settings?.redactionPack).toBe("strict");
     expect(parsed.settings?.maxInterventionsRetained).toBe(3);
     expect(parsed.settings?.interventionRetentionMode).toBe("severity");
+    expect(parsed.settings?.maxActionAttempts).toBe(3);
+    expect(parsed.settings?.retryBackoffMs).toBe(120);
   });
 
   it("rejects invalid click action with no target", () => {
     expect(() => parseAction({ type: "click" })).toThrowError();
+  });
+
+  it("rejects invalid retry settings", () => {
+    expect(() =>
+      parseScript({
+        settings: {
+          maxActionAttempts: 0
+        },
+        actions: [
+          {
+            type: "snapshot"
+          }
+        ]
+      })
+    ).toThrowError();
   });
 
   it("parses target by semantic role and name", () => {

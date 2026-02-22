@@ -48,6 +48,8 @@ const DEFAULT_OPTIONS: Required<
     | "artifactsDir"
     | "contextAttachments"
     | "contextAttachmentsDir"
+    | "maxActionAttempts"
+    | "retryBackoffMs"
   >
 > = {
   headed: true,
@@ -65,7 +67,9 @@ const DEFAULT_OPTIONS: Required<
   captureScreenshots: true,
   artifactsDir: ".agent-browser/artifacts",
   contextAttachments: true,
-  contextAttachmentsDir: ".agent-browser/context"
+  contextAttachmentsDir: ".agent-browser/context",
+  maxActionAttempts: 1,
+  retryBackoffMs: 150
 };
 
 interface MockRule {
@@ -290,6 +294,112 @@ export class AgentSession {
 
   async perform(rawAction: Action): Promise<ActionResult> {
     const action = parseAction(rawAction) as Action;
+
+    const retryPolicy = this.resolveRetryPolicy();
+    const attemptResults: ActionResult[] = [];
+
+    for (let attempt = 1; attempt <= retryPolicy.maxAttempts; attempt += 1) {
+      const attemptResult = await this.performSingleAttempt(action);
+      attemptResults.push(attemptResult);
+
+      if (!shouldRetryActionResult(attemptResult.status, attempt, retryPolicy.maxAttempts)) {
+        break;
+      }
+
+      if (retryPolicy.backoffMs > 0) {
+        await new Promise<void>((resolvePromise) => {
+          setTimeout(resolvePromise, retryPolicy.backoffMs);
+        });
+      }
+    }
+
+    const result = attemptResults[attemptResults.length - 1];
+    if (!result) {
+      throw new Error("Action execution completed without an attempt result");
+    }
+
+    const retrySummary = buildRetrySummary(attemptResults, retryPolicy.maxAttempts, retryPolicy.backoffMs);
+    if (retrySummary) {
+      result.retry = retrySummary;
+    }
+
+    const resolvedNode = result.resolvedNodeId
+      ? result.preSnapshot.nodes.find((candidate) => candidate.id === result.resolvedNodeId)
+      : undefined;
+
+    this.traceRecords.push({
+      action,
+      result: {
+        status: result.status,
+        postDomHash: result.postSnapshot.domHash,
+        durationMs: result.durationMs,
+        postUrl: result.postSnapshot.url,
+        postTitle: result.postSnapshot.title,
+        postInteractiveCount: result.postSnapshot.interactiveCount,
+        waitForSelector: extractSelectorInvariant(action),
+        selectorTarget: result.selectorDiagnostics?.targetLabel,
+        selectorCandidateCount: result.selectorDiagnostics?.candidateCount,
+        selectorFallbackDepth: result.selectorDiagnostics?.selectedCandidateIndex,
+        selectorAttemptedCount: result.selectorDiagnostics?.attemptedCandidateCount,
+        selectorSelectedCandidate: result.selectorDiagnostics?.selectedCandidateLabel,
+        networkErrorCount: result.events.filter(
+          (event) => event.kind === "network" && event.phase === "request_failed"
+        ).length,
+        eventCount: result.events.length,
+        errorMessage: result.error?.message,
+        retryAttemptCount: result.retry?.attemptCount,
+        retryMaxAttempts: result.retry?.maxAttempts,
+        retryFinalReason: result.retry?.finalReason,
+        retryAttemptStatuses: result.retry?.attempts.map((attempt) => attempt.status),
+        retryAttemptDurationsMs: result.retry?.attempts.map((attempt) => attempt.durationMs)
+      }
+    });
+
+    this.timelineEntries.push({
+      index: this.timelineEntries.length,
+      actionType: action.type,
+      status: result.status,
+      durationMs: result.durationMs,
+      postUrl: result.postSnapshot.url,
+      postDomHash: result.postSnapshot.domHash,
+      domDiffSummary: result.domDiff.summary,
+      eventCount: result.events.length,
+      screenshotPath: result.screenshotPath,
+      annotatedScreenshotPath: result.annotatedScreenshotPath,
+      target:
+        resolvedNode || result.resolvedBoundingBox
+          ? {
+              nodeId: result.resolvedNodeId,
+              stableRef: resolvedNode?.stableRef,
+              role: resolvedNode?.role,
+              name: resolvedNode?.name,
+              boundingBox: result.resolvedBoundingBox
+            }
+          : undefined,
+      retry: result.retry
+        ? {
+            attemptCount: result.retry.attemptCount,
+            maxAttempts: result.retry.maxAttempts,
+            backoffMs: result.retry.backoffMs,
+            finalReason: result.retry.finalReason,
+            attemptStatuses: result.retry.attempts.map((attempt) => attempt.status),
+            attemptDurationsMs: result.retry.attempts.map((attempt) => attempt.durationMs)
+          }
+        : undefined
+    });
+
+    noteOriginFromUrl(this.requiredOrigins, result.postSnapshot.url);
+    if (action.type === "navigate") {
+      noteOriginFromUrl(this.requiredOrigins, action.url);
+    }
+    if (action.type === "switchProfile" && action.url) {
+      noteOriginFromUrl(this.requiredOrigins, action.url);
+    }
+
+    return result;
+  }
+
+  private async performSingleAttempt(action: Action): Promise<ActionResult> {
     let page = this.requirePage();
     let observer = this.requireObserver();
     await this.waitForExecutionResume();
@@ -388,9 +498,6 @@ export class AgentSession {
     }
 
     const finishedAt = Date.now();
-    const resolvedNode = resolvedNodeId
-      ? preSnapshot.nodes.find((candidate) => candidate.id === resolvedNodeId)
-      : undefined;
     const result: ActionResult = {
       actionId,
       sessionId: this.sessionId,
@@ -428,60 +535,6 @@ export class AgentSession {
     } catch (contextError) {
       const message = contextError instanceof Error ? contextError.message : String(contextError);
       result.error = appendError(result.error, `Context attachment failed: ${message}`);
-    }
-
-    this.traceRecords.push({
-      action,
-      result: {
-        status: result.status,
-        postDomHash: result.postSnapshot.domHash,
-        durationMs: result.durationMs,
-        postUrl: result.postSnapshot.url,
-        postTitle: result.postSnapshot.title,
-        postInteractiveCount: result.postSnapshot.interactiveCount,
-        waitForSelector: extractSelectorInvariant(action),
-        selectorTarget: result.selectorDiagnostics?.targetLabel,
-        selectorCandidateCount: result.selectorDiagnostics?.candidateCount,
-        selectorFallbackDepth: result.selectorDiagnostics?.selectedCandidateIndex,
-        selectorAttemptedCount: result.selectorDiagnostics?.attemptedCandidateCount,
-        selectorSelectedCandidate: result.selectorDiagnostics?.selectedCandidateLabel,
-        networkErrorCount: result.events.filter(
-          (event) => event.kind === "network" && event.phase === "request_failed"
-        ).length,
-        eventCount: result.events.length,
-        errorMessage: result.error?.message
-      }
-    });
-
-    this.timelineEntries.push({
-      index: this.timelineEntries.length,
-      actionType: action.type,
-      status: result.status,
-      durationMs: result.durationMs,
-      postUrl: result.postSnapshot.url,
-      postDomHash: result.postSnapshot.domHash,
-      domDiffSummary: result.domDiff.summary,
-      eventCount: result.events.length,
-      screenshotPath: result.screenshotPath,
-      annotatedScreenshotPath: result.annotatedScreenshotPath,
-      target:
-        resolvedNode || resolvedBoundingBox
-          ? {
-              nodeId: resolvedNodeId,
-              stableRef: resolvedNode?.stableRef,
-              role: resolvedNode?.role,
-              name: resolvedNode?.name,
-              boundingBox: resolvedBoundingBox
-            }
-          : undefined
-    });
-
-    noteOriginFromUrl(this.requiredOrigins, result.postSnapshot.url);
-    if (action.type === "navigate") {
-      noteOriginFromUrl(this.requiredOrigins, action.url);
-    }
-    if (action.type === "switchProfile" && action.url) {
-      noteOriginFromUrl(this.requiredOrigins, action.url);
     }
 
     return result;
@@ -1734,6 +1787,26 @@ export class AgentSession {
     };
   }
 
+  private resolveRetryPolicy(): { maxAttempts: number; backoffMs: number } {
+    const rawMaxAttempts = this.options.maxActionAttempts;
+    const rawBackoffMs = this.options.retryBackoffMs;
+
+    const maxAttempts =
+      typeof rawMaxAttempts === "number" && Number.isFinite(rawMaxAttempts)
+        ? Math.max(1, Math.floor(rawMaxAttempts))
+        : DEFAULT_OPTIONS.maxActionAttempts;
+
+    const backoffMs =
+      typeof rawBackoffMs === "number" && Number.isFinite(rawBackoffMs)
+        ? Math.max(0, Math.floor(rawBackoffMs))
+        : DEFAULT_OPTIONS.retryBackoffMs;
+
+    return {
+      maxAttempts,
+      backoffMs
+    };
+  }
+
   private async waitForExecutionResume(): Promise<void> {
     if (this.executionPauseSources.size === 0) {
       return;
@@ -1834,6 +1907,75 @@ function isRetryableError(message: string): boolean {
     lowered.includes("net::err") ||
     lowered.includes("navigation")
   );
+}
+
+function shouldRetryActionResult(
+  status: ActionResult["status"],
+  attempt: number,
+  maxAttempts: number
+): boolean {
+  return status === "retryable_error" && attempt < maxAttempts;
+}
+
+function buildRetrySummary(
+  attempts: ActionResult[],
+  maxAttempts: number,
+  backoffMs: number
+): ActionResult["retry"] | undefined {
+  const finalResult = attempts[attempts.length - 1];
+  if (!finalResult) {
+    return undefined;
+  }
+
+  if (maxAttempts <= 1 && attempts.length <= 1) {
+    return undefined;
+  }
+
+  const finalReason = resolveRetryFinalReason(finalResult.status, attempts.length, maxAttempts);
+
+  return {
+    enabled: true,
+    maxAttempts,
+    attemptCount: attempts.length,
+    backoffMs,
+    finalReason,
+    attempts: attempts.map((attemptResult, index) => ({
+      attempt: index + 1,
+      actionId: attemptResult.actionId,
+      status: attemptResult.status,
+      durationMs: attemptResult.durationMs,
+      postUrl: attemptResult.postSnapshot.url,
+      postDomHash: attemptResult.postSnapshot.domHash,
+      eventCount: attemptResult.events.length,
+      errorMessage: attemptResult.error?.message,
+      screenshotPath: attemptResult.screenshotPath,
+      annotatedScreenshotPath: attemptResult.annotatedScreenshotPath
+    }))
+  };
+}
+
+function resolveRetryFinalReason(
+  status: ActionResult["status"],
+  attemptCount: number,
+  maxAttempts: number
+): NonNullable<ActionResult["retry"]>["finalReason"] {
+  if (status === "ok") {
+    return "succeeded";
+  }
+
+  if (status === "fatal_error") {
+    return "non_retryable_error";
+  }
+
+  if (maxAttempts <= 1) {
+    return "retry_disabled";
+  }
+
+  if (attemptCount >= maxAttempts) {
+    return "max_attempts_reached";
+  }
+
+  return "retry_disabled";
 }
 
 function getActionTimeout(action: Action): number | undefined {

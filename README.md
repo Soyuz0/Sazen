@@ -148,7 +148,9 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
     "captureScreenshots": true,
     "screenshotMode": "viewport",
     "maxInterventionsRetained": 100,
-    "interventionRetentionMode": "severity"
+    "interventionRetentionMode": "severity",
+    "maxActionAttempts": 3,
+    "retryBackoffMs": 150
   },
   "actions": [
     { "type": "setViewport", "width": 1366, "height": 768 },
@@ -213,6 +215,12 @@ Network-aware wait example:
   }
 }
 ```
+
+### Auto-retry policy
+- `settings.maxActionAttempts` controls bounded retries for retryable failures (`timeout`, transient navigation/network races).
+- `settings.retryBackoffMs` adds delay between retry attempts.
+- Per-attempt evidence is captured in action results (`result.retry.attempts[]`) and persisted in trace records/timeline metadata.
+- Retries only re-run `retryable_error` attempts; `fatal_error` exits immediately with `finalReason=non_retryable_error`.
 
 Visual baseline assert example:
 
@@ -330,6 +338,8 @@ Common options (available on most execution commands):
 `run`/`loop` additional option:
 - `--max-interventions-retained <n>`
 - `--intervention-retention-mode count|severity`
+- `--max-action-attempts <n>`
+- `--retry-backoff-ms <n>`
 
 ### Stability profiles
 - `fast`: smaller stability windows, quickest runs.
@@ -456,9 +466,9 @@ Implemented now:
 - run-level pause/resume controls with trace intervention journaling and provenance markers
 - trace-scoped role switching, visual baseline assert, live timeline TUI, selector health + run index
 - network-aware wait primitives via `waitFor.condition.kind = network_response`
+- bounded action auto-retry policy with per-attempt evidence + final rationale in traces
 
 Planned (tracked in `.plan`):
-- auto-retry with evidence policy
 - session identity clarity in adapter responses
 - checkpoint/resume for long flows
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

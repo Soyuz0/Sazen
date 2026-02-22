@@ -111,6 +111,34 @@ export interface PerformanceMetrics {
 
 export type ActionStatus = "ok" | "retryable_error" | "fatal_error";
 
+export type RetryFinalReason =
+  | "succeeded"
+  | "max_attempts_reached"
+  | "non_retryable_error"
+  | "retry_disabled";
+
+export interface RetryAttemptEvidence {
+  attempt: number;
+  actionId: string;
+  status: ActionStatus;
+  durationMs: number;
+  postUrl: string;
+  postDomHash: string;
+  eventCount: number;
+  errorMessage?: string;
+  screenshotPath?: string;
+  annotatedScreenshotPath?: string;
+}
+
+export interface RetrySummary {
+  enabled: boolean;
+  maxAttempts: number;
+  attemptCount: number;
+  backoffMs: number;
+  finalReason: RetryFinalReason;
+  attempts: RetryAttemptEvidence[];
+}
+
 export type NodeTarget =
   | {
       kind: "node";
@@ -336,6 +364,7 @@ export interface ActionResult {
     urlChanged: boolean;
     domChanged: boolean;
   };
+  retry?: RetrySummary;
   error?: {
     message: string;
     stack?: string;
@@ -360,6 +389,11 @@ export interface TraceRecord {
     networkErrorCount?: number;
     eventCount?: number;
     errorMessage?: string;
+    retryAttemptCount?: number;
+    retryMaxAttempts?: number;
+    retryFinalReason?: RetryFinalReason;
+    retryAttemptStatuses?: ActionStatus[];
+    retryAttemptDurationsMs?: number[];
   };
 }
 
@@ -392,6 +426,14 @@ export interface TraceTimelineEntry {
     urlChanged?: boolean;
     domChanged?: boolean;
     hints?: string[];
+  };
+  retry?: {
+    attemptCount: number;
+    maxAttempts: number;
+    backoffMs: number;
+    finalReason: RetryFinalReason;
+    attemptStatuses: ActionStatus[];
+    attemptDurationsMs: number[];
   };
 }
 
@@ -462,6 +504,8 @@ export interface AgentSessionOptions {
   contextAttachmentsDir?: string;
   maxInterventionsRetained?: number;
   interventionRetentionMode?: "count" | "severity";
+  maxActionAttempts?: number;
+  retryBackoffMs?: number;
   storageStatePath?: string;
   logRedactionPatterns?: RegExp[];
   logNoiseFiltering?: boolean;

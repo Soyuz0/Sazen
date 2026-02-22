@@ -506,6 +506,92 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("retries retryable actions with per-attempt evidence and rationale", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-retry-policy-"));
+    const tracePath = join(tempDir, "trace.json");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir,
+      maxActionAttempts: 3,
+      retryBackoffMs: 80
+    });
+
+    try {
+      await session.start();
+
+      const nav = await session.perform({
+        type: "navigate",
+        url: `${fixture.baseUrl}/retry-assert.html`
+      });
+      expect(nav.status).toBe("ok");
+
+      const trigger = await session.perform({
+        type: "click",
+        target: {
+          kind: "css",
+          selector: "#trigger"
+        }
+      });
+      expect(trigger.status).toBe("ok");
+
+      const retriedAssert = await session.perform({
+        type: "assert",
+        timeoutMs: 70,
+        condition: {
+          kind: "selector",
+          selector: "#late-indicator",
+          state: "visible"
+        }
+      });
+
+      expect(retriedAssert.status).toBe("ok");
+      expect(retriedAssert.retry?.attemptCount).toBeGreaterThan(1);
+      expect(retriedAssert.retry?.maxAttempts).toBe(3);
+      expect(retriedAssert.retry?.finalReason).toBe("succeeded");
+      const attemptStatuses = retriedAssert.retry?.attempts.map((attempt) => attempt.status) ?? [];
+      expect(attemptStatuses[0]).toBe("retryable_error");
+      expect(attemptStatuses[attemptStatuses.length - 1]).toBe("ok");
+
+      const nonRetryable = await session.perform({
+        type: "assert",
+        timeoutMs: 200,
+        condition: {
+          kind: "selector",
+          selector: "#state",
+          state: "visible",
+          textContains: "never"
+        }
+      });
+      expect(nonRetryable.status).toBe("fatal_error");
+      expect(nonRetryable.retry?.attemptCount).toBe(1);
+      expect(nonRetryable.retry?.finalReason).toBe("non_retryable_error");
+
+      await session.saveTrace(tracePath);
+      const traceRaw = await readFile(tracePath, "utf8");
+      const trace = JSON.parse(traceRaw) as SavedTrace;
+
+      const retriedRecord = trace.records.find(
+        (record) => record.action.type === "assert" && record.result.retryAttemptCount === retriedAssert.retry?.attemptCount
+      );
+      expect(retriedRecord).toBeDefined();
+      expect(retriedRecord?.result.retryFinalReason).toBe("succeeded");
+
+      const fatalRecord = trace.records.find(
+        (record) =>
+          record.action.type === "assert" &&
+          record.result.retryAttemptCount === 1 &&
+          record.result.retryFinalReason === "non_retryable_error"
+      );
+      expect(fatalRecord).toBeDefined();
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("writes context attachment manifest for screenshot-producing actions", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-context-attach-"));
     const contextDir = join(tempDir, "context");

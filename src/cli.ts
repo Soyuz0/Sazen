@@ -163,6 +163,8 @@ function configureRunCommand(root: Command): void {
       "--intervention-retention-mode <mode>",
       "Intervention retention mode: count|severity"
     )
+    .option("--max-action-attempts <n>", "Maximum attempts per action before failing")
+    .option("--retry-backoff-ms <n>", "Delay between retry attempts in milliseconds")
     .action(async (scriptPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(scriptPath);
       const raw = await readFile(absolutePath, "utf8");
@@ -345,6 +347,8 @@ function configureLoopCommand(root: Command): void {
       "--intervention-retention-mode <mode>",
       "Intervention retention mode: count|severity"
     )
+    .option("--max-action-attempts <n>", "Maximum attempts per action before failing")
+    .option("--retry-backoff-ms <n>", "Delay between retry attempts in milliseconds")
     .action(async (loopPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(loopPath);
       const raw = await readFile(absolutePath, "utf8");
@@ -1544,6 +1548,8 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
   const redactionPack = parseRedactionPack(options.redactionPack);
   const maxInterventionsRetained = toOptionalNumber(options.maxInterventionsRetained);
   const interventionRetentionMode = parseInterventionRetentionMode(options.interventionRetentionMode);
+  const maxActionAttempts = toOptionalNumber(options.maxActionAttempts);
+  const retryBackoffMs = toOptionalNumber(options.retryBackoffMs);
 
   const result: AgentSessionOptions = {
     viewportWidth: viewport?.width,
@@ -1572,6 +1578,14 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
 
   if (interventionRetentionMode) {
     result.interventionRetentionMode = interventionRetentionMode;
+  }
+
+  if (typeof maxActionAttempts === "number" && maxActionAttempts >= 1) {
+    result.maxActionAttempts = Math.floor(maxActionAttempts);
+  }
+
+  if (typeof retryBackoffMs === "number" && retryBackoffMs >= 0) {
+    result.retryBackoffMs = Math.floor(retryBackoffMs);
   }
 
   if (isFlagPresent("--no-annotate-screenshots")) {
@@ -1698,6 +1712,13 @@ function printActionResult(result: ActionResult, printEvents: boolean): void {
   if (result.pauseSummary) {
     console.log(
       `pause: mode=${result.pauseSummary.mode} elapsed=${result.pauseSummary.elapsedMs}ms urlChanged=${result.pauseSummary.urlChanged} domChanged=${result.pauseSummary.domChanged}`
+    );
+  }
+
+  if (result.retry) {
+    const statuses = result.retry.attempts.map((attempt) => attempt.status).join(" -> ");
+    console.log(
+      `retry: attempts=${result.retry.attemptCount}/${result.retry.maxAttempts} backoff=${result.retry.backoffMs}ms final=${result.retry.finalReason} statuses=${statuses}`
     );
   }
 

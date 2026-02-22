@@ -231,6 +231,8 @@ export const scriptSchema = z.object({
       contextAttachmentsDir: z.string().optional(),
       maxInterventionsRetained: z.number().int().nonnegative().optional(),
       interventionRetentionMode: z.enum(["count", "severity"]).optional(),
+      maxActionAttempts: z.number().int().positive().optional(),
+      retryBackoffMs: z.number().int().nonnegative().optional(),
       storageStatePath: z.string().optional(),
       logNoiseFiltering: z.boolean().optional()
     })
