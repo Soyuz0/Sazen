@@ -112,7 +112,7 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 - `replay <trace>`: deterministic replay (strict/relaxed).
 - `flake <trace>`: repeated replay mismatch analysis.
 - `timeline <trace>`: terminal timeline view.
-- `timeline-html <trace>`: interactive HTML timeline inspector (grouping, search, detail pane).
+- `timeline-html <trace>`: interactive HTML timeline inspector (grouping, search, presets, diff-only focus, detail pane).
 - `bundle <trace>`: triage bundle (trace + manifest + artifacts refs).
 - `visual-diff <baselineTrace> <candidateTrace>`: screenshot diff overlays.
 

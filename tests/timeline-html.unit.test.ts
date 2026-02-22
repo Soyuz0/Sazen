@@ -32,6 +32,9 @@ describe("timeline html", () => {
     expect(html).toContain("Entry Details");
     expect(html).toContain("Status Groups");
     expect(html).toContain("Action Groups");
+    expect(html).toContain("presetFilter");
+    expect(html).toContain("Diff-only focus");
+    expect(html).toContain("matchesPresetFilter");
   });
 
   it("escapes html-sensitive content", () => {

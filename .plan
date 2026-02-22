@@ -96,6 +96,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented trace-scoped profile switching action (`switchProfile`) for in-run role transitions.
 - Implemented visual baseline assert condition (`assert` + `visual_baseline`) with mismatch thresholding and diff artifacts.
 - Implemented live timeline TUI mode for `run` (`--live-timeline --live-timeline-mode tui`) with auto-refresh rows and recent artifact/error panes.
+- Implemented timeline HTML filter presets and diff-only focus mode for long traces.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -147,6 +148,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added integration coverage for switching between saved profiles inside a single trace run.
 - Added integration coverage for pass/fail visual baseline assertions within regular action scripts.
 - Added unit coverage for live timeline TUI frame rendering and action-result row mapping.
+- Added unit coverage for timeline HTML preset/diff-only control rendering.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -241,4 +243,4 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Resolved:** timeline inspector UI with grouping, search, and row-level detail pane.
 - **Resolved:** element-aware diff overlays including target boxes and semantic labels.
 - **Resolved:** default screenshot context handoff for immediate feedback loops.
-- **New gap:** add filter presets and diff-only focus mode in timeline inspector for very long traces.
+- **Resolved:** timeline inspector filter presets and diff-only focus mode for long traces.

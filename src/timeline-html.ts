@@ -95,6 +95,8 @@ export function buildTimelineHtmlDocument(input: {
     p.meta { margin: 0 0 16px; color: #4b5563; }
     .controls { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
     input, select { height: 34px; border: 1px solid #cdd5df; border-radius: 8px; padding: 0 10px; background: white; }
+    .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #334155; }
+    .toggle input { width: 16px; height: 16px; }
     .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
     .summary { background: white; border: 1px solid #d9dfeb; border-radius: 10px; padding: 12px; margin-bottom: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .summary h2 { margin: 0 0 6px; font-size: 14px; }
@@ -126,8 +128,16 @@ export function buildTimelineHtmlDocument(input: {
       <option value="retryable_error">retryable_error</option>
       <option value="fatal_error">fatal_error</option>
     </select>
+    <select id="presetFilter">
+      <option value="all">Preset: all rows</option>
+      <option value="failures">Preset: failures</option>
+      <option value="control">Preset: control markers</option>
+      <option value="interactions">Preset: interaction actions</option>
+      <option value="assertions">Preset: assertions</option>
+    </select>
     <input id="actionFilter" placeholder="Filter action type" />
     <input id="textFilter" placeholder="Search URL/hash/target" />
+    <label class="toggle"><input id="diffOnlyToggle" type="checkbox" />Diff-only focus</label>
   </div>
   <div class="summary">
     <div>
@@ -167,12 +177,15 @@ export function buildTimelineHtmlDocument(input: {
   <script>
     const timeline = ${timelineJson};
     const statusFilter = document.getElementById('statusFilter');
+    const presetFilter = document.getElementById('presetFilter');
     const actionFilter = document.getElementById('actionFilter');
     const textFilter = document.getElementById('textFilter');
+    const diffOnlyToggle = document.getElementById('diffOnlyToggle');
     const rows = Array.from(document.querySelectorAll('tbody tr[data-status]'));
     const statusSummary = document.getElementById('statusSummary');
     const actionSummary = document.getElementById('actionSummary');
     const detailsPane = document.getElementById('detailsPane');
+    const timelineByIndex = new Map(timeline.map((entry) => [entry.index, entry]));
 
     let selectedIndex = null;
 
@@ -207,8 +220,10 @@ export function buildTimelineHtmlDocument(input: {
 
     function applyFilters() {
       const status = statusFilter.value.trim();
+      const preset = presetFilter.value;
       const action = actionFilter.value.trim().toLowerCase();
       const text = textFilter.value.trim().toLowerCase();
+      const diffOnly = Boolean(diffOnlyToggle.checked);
       const statusCounts = new Map();
       const actionCounts = new Map();
       let firstVisible = null;
@@ -216,7 +231,9 @@ export function buildTimelineHtmlDocument(input: {
       for (const row of rows) {
         const matchesStatus = !status || row.dataset.status === status;
         const matchesAction = !action || (row.dataset.action || '').toLowerCase().includes(action);
-        const entry = timeline.find((item) => item.index === Number(row.dataset.index));
+        const entry = timelineByIndex.get(Number(row.dataset.index));
+        const matchesPreset = matchesPresetFilter(entry, preset);
+        const matchesDiff = !diffOnly || hasMeaningfulDiff(entry);
         const searchable = JSON.stringify({
           action: entry?.actionType,
           status: entry?.status,
@@ -226,7 +243,7 @@ export function buildTimelineHtmlDocument(input: {
           control: entry?.control
         }).toLowerCase();
         const matchesText = !text || searchable.includes(text);
-        const visible = matchesStatus && matchesAction && matchesText;
+        const visible = matchesStatus && matchesAction && matchesText && matchesPreset && matchesDiff;
         row.style.display = visible ? '' : 'none';
 
         if (visible) {
@@ -259,10 +276,41 @@ export function buildTimelineHtmlDocument(input: {
     }
 
     statusFilter.addEventListener('change', applyFilters);
+    presetFilter.addEventListener('change', applyFilters);
     actionFilter.addEventListener('input', applyFilters);
     textFilter.addEventListener('input', applyFilters);
+    diffOnlyToggle.addEventListener('change', applyFilters);
 
     applyFilters();
+
+    function hasMeaningfulDiff(entry) {
+      if (!entry || !entry.domDiffSummary) {
+        return false;
+      }
+      return (entry.domDiffSummary.added + entry.domDiffSummary.removed + entry.domDiffSummary.changed) > 0;
+    }
+
+    function matchesPresetFilter(entry, preset) {
+      if (!entry) {
+        return false;
+      }
+      if (preset === 'all') {
+        return true;
+      }
+      if (preset === 'failures') {
+        return entry.status !== 'ok';
+      }
+      if (preset === 'control') {
+        return Boolean(entry.control) || entry.actionType === 'pause_start' || entry.actionType === 'pause_resume';
+      }
+      if (preset === 'interactions') {
+        return ['click', 'fill', 'select', 'press'].includes(entry.actionType);
+      }
+      if (preset === 'assertions') {
+        return entry.actionType === 'assert';
+      }
+      return true;
+    }
   </script>
 </body>
 </html>`;
