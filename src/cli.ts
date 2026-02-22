@@ -1518,12 +1518,14 @@ function configureRunControlCommand(root: Command): void {
     .argument("<command>", "pause|resume|state")
     .requiredOption("--socket <path>", "Control socket path created by run")
     .option("--timeout <ms>", "Request timeout in ms", "5000")
+    .option("--wait-for-socket-ms <ms>", "Wait for socket readiness before sending command", "0")
     .option("--json", "Print raw JSON response", false)
     .action(async (command: string, options: Record<string, string | boolean>) => {
       const parsed = parseRunControlCommand(command);
       const socketPath = resolve(String(options.socket));
       const timeoutMs = Math.max(100, toNumber(options.timeout, 5_000));
-      const response = await sendRunControlCommand(socketPath, parsed, timeoutMs);
+      const waitForSocketMs = Math.max(0, toNumber(options.waitForSocketMs, 0));
+      const response = await sendRunControlCommandWithWait(socketPath, parsed, timeoutMs, waitForSocketMs);
 
       if (Boolean(options.json)) {
         console.log(JSON.stringify(response, null, 2));
@@ -1870,6 +1872,66 @@ async function sendRunControlCommand(
         finishWithError(new Error("Run control socket closed before returning a response"));
       }
     });
+  });
+}
+
+async function sendRunControlCommandWithWait(
+  socketPath: string,
+  command: "pause" | "resume" | "state",
+  timeoutMs: number,
+  waitForSocketMs: number
+): Promise<RunControlResponse> {
+  if (waitForSocketMs <= 0) {
+    return sendRunControlCommand(socketPath, command, timeoutMs);
+  }
+
+  const deadline = Date.now() + waitForSocketMs;
+  let lastError: unknown;
+
+  while (Date.now() <= deadline) {
+    try {
+      return await sendRunControlCommand(socketPath, command, timeoutMs);
+    } catch (error) {
+      lastError = error;
+      if (!isRunControlSocketNotReadyError(error)) {
+        throw error;
+      }
+
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        break;
+      }
+
+      await sleep(Math.min(remaining, 100));
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw new Error(
+      `Run control socket '${socketPath}' was not ready within ${waitForSocketMs}ms: ${lastError.message}`
+    );
+  }
+
+  throw new Error(`Run control socket '${socketPath}' was not ready within ${waitForSocketMs}ms`);
+}
+
+function isRunControlSocketNotReadyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  if (code === "ENOENT" || code === "ECONNREFUSED") {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("enoent") || message.includes("econnrefused") || message.includes("no such file");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolvePromise) => {
+    setTimeout(resolvePromise, ms);
   });
 }
 
