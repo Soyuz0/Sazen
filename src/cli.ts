@@ -8,6 +8,7 @@ import { createInterface } from "node:readline";
 import { Command } from "commander";
 import { AdapterRuntime, type AdapterRequest } from "./adapter.js";
 import { cliActionSchema, parseLoopScript, parseScript } from "./contracts.js";
+import { renderLiveTimelineTuiFrame, toLiveTimelineEntry, type LiveTimelineEntry } from "./live-timeline.js";
 import { runLoop } from "./loop.js";
 import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
@@ -147,12 +148,16 @@ function configureRunCommand(root: Command): void {
     .option("--save <name>", "Save session on completion")
     .option("--logs", "Print captured events after each action", false)
     .option("--live-timeline", "Print timeline rows as actions complete", false)
+    .option("--live-timeline-mode <mode>", "Live timeline mode: row|tui", "row")
     .option("--timeline-stream <path>", "Write live timeline JSONL stream to file")
     .option("--control-socket <path>", "Enable run control socket at this path")
     .action(async (scriptPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(scriptPath);
       const raw = await readFile(absolutePath, "utf8");
       const script = parseScript(JSON.parse(raw));
+      const liveTimelineMode = parseLiveTimelineMode(options.liveTimelineMode);
+      const usingLiveTimelineTui =
+        Boolean(options.liveTimeline) && liveTimelineMode === "tui" && Boolean(process.stdout.isTTY);
 
       const session = new AgentSession({
         ...script.settings,
@@ -179,6 +184,8 @@ function configureRunCommand(root: Command): void {
 
       let failedActions = 0;
       let printedTimelineHeader = false;
+      const liveTimelineEntries: LiveTimelineEntry[] = [];
+      const runStartedAt = Date.now();
       try {
         runControl = controlSocketPath
           ? await startRunControlServer({
@@ -197,25 +204,49 @@ function configureRunCommand(root: Command): void {
             })
           : undefined;
 
-        if (runControl) {
+        if (runControl && !usingLiveTimelineTui) {
           console.log(`Run control socket: ${runControl.socketPath}`);
         }
 
         for (const [index, action] of script.actions.entries()) {
           currentActionIndex = index;
-          console.log(`\nAction ${index + 1}/${script.actions.length}: ${action.type}`);
-          if (action.type === "pause" && (action.mode ?? "enter") === "enter") {
+          if (!usingLiveTimelineTui) {
+            console.log(`\nAction ${index + 1}/${script.actions.length}: ${action.type}`);
+          }
+          if (!usingLiveTimelineTui && action.type === "pause" && (action.mode ?? "enter") === "enter") {
             console.log("Pause action active: press Enter to resume (or wait for timeout).");
           }
           const result = await session.perform(action as Action);
-          printActionResult(result, Boolean(options.logs));
+          if (!usingLiveTimelineTui) {
+            printActionResult(result, Boolean(options.logs));
+          }
+
+          if (result.status !== "ok") {
+            failedActions += 1;
+          }
 
           if (Boolean(options.liveTimeline)) {
-            if (!printedTimelineHeader) {
-              console.log("  # | action | status | duration | events | diff | url");
-              printedTimelineHeader = true;
+            if (usingLiveTimelineTui) {
+              liveTimelineEntries.push(toLiveTimelineEntry(index, result));
+              process.stdout.write(
+                renderLiveTimelineTuiFrame({
+                  entries: liveTimelineEntries,
+                  totalActions: script.actions.length,
+                  completedActions: index + 1,
+                  failedActions,
+                  startedAt: runStartedAt,
+                  scriptPath: absolutePath,
+                  columns: process.stdout.columns,
+                  rows: process.stdout.rows
+                })
+              );
+            } else {
+              if (!printedTimelineHeader) {
+                console.log("  # | action | status | duration | events | diff | url");
+                printedTimelineHeader = true;
+              }
+              console.log(`  ${formatTimelineEntry(index, result)}`);
             }
-            console.log(`  ${formatTimelineEntry(index, result)}`);
           }
 
           if (typeof options.timelineStream === "string" && options.timelineStream.length > 0) {
@@ -235,14 +266,20 @@ function configureRunCommand(root: Command): void {
             await appendFile(resolve(options.timelineStream), `${JSON.stringify(record)}\n`, "utf8");
           }
 
-          if (result.status !== "ok") {
-            failedActions += 1;
-          }
-
           completedActions = index + 1;
         }
 
         runFinished = true;
+
+        if (usingLiveTimelineTui) {
+          process.stdout.write("\n");
+          console.log(
+            `Run complete: completed=${completedActions}/${script.actions.length} failed=${failedActions}`
+          );
+          if (runControl) {
+            console.log(`Run control socket: ${runControl.socketPath}`);
+          }
+        }
 
         if (typeof options.trace === "string" && options.trace.length > 0) {
           const tracePath = await session.saveTrace(options.trace);
@@ -1326,6 +1363,18 @@ function parseRunControlCommand(raw: string): "pause" | "resume" | "state" {
   }
 
   throw new Error(`Unsupported run control command '${raw}'. Use pause, resume, or state.`);
+}
+
+function parseLiveTimelineMode(raw: string | boolean | undefined): "row" | "tui" {
+  if (typeof raw !== "string") {
+    return "row";
+  }
+
+  if (raw === "row" || raw === "tui") {
+    return raw;
+  }
+
+  throw new Error(`Invalid live timeline mode '${raw}'. Use row or tui.`);
 }
 
 function toSessionOptions(options: Record<string, string | boolean>): AgentSessionOptions {

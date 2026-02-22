@@ -24,6 +24,9 @@ npm test
 
 ```bash
 npm run dev -- run examples/sample-flow.json --trace traces/sample-trace.json --live-timeline
+
+# interactive terminal timeline pane
+npm run dev -- run examples/sample-flow.json --live-timeline --live-timeline-mode tui
 ```
 
 Loop mode (action -> observe -> branch):

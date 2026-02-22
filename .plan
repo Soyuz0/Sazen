@@ -95,6 +95,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented first-class `loop` runner with action->observe->branch flow and optional iteration cap (`loop` command + loop script schema).
 - Implemented trace-scoped profile switching action (`switchProfile`) for in-run role transitions.
 - Implemented visual baseline assert condition (`assert` + `visual_baseline`) with mismatch thresholding and diff artifacts.
+- Implemented live timeline TUI mode for `run` (`--live-timeline --live-timeline-mode tui`) with auto-refresh rows and recent artifact/error panes.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -145,6 +146,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added loop runner integration coverage and fixture flow for branch-on-observation execution.
 - Added integration coverage for switching between saved profiles inside a single trace run.
 - Added integration coverage for pass/fail visual baseline assertions within regular action scripts.
+- Added unit coverage for live timeline TUI frame rendering and action-result row mapping.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -187,13 +189,14 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
   - Existing replay/visual/timeline suites stay green.
 
 ### Near-Term (v0.x) - Remaining
-- **Live timeline TUI:** terminal pane with auto-updating action timeline and artifact links during execution.
+- (none; current near-term tranche is complete)
 
 ### Near-Term (v0.x) - Completed
 - **Resilient selector healing:** completed via ranked fallback locator chain (test id/id/href/name/role/css path) plus ambiguity ranking and disambiguation.
 - **Context-native screenshot handoff (default-on):** completed via automatic attachment publication under `.agent-browser/context/` (`latest.json`, `attachments.jsonl`, latest/archive images).
 - **Trace-scoped role switching:** completed via `switchProfile` action for profile selection directly inside scripts/replay sessions.
 - **Visual diff assertions:** completed via `assert` condition kind `visual_baseline` with baseline thresholding and diff evidence.
+- **Live timeline TUI:** completed via `run --live-timeline --live-timeline-mode tui` with terminal auto-refresh and artifact/error summaries.
 
 ### Prioritized Post-Dogfooding Additions (Impact vs Effort)
 - **P0 - Completed: Graceful interrupt/shutdown hardening** (idempotent session/adapter shutdown, cancellable interrupt waiters, close-race noise suppression).

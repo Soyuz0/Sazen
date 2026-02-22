@@ -104,6 +104,10 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 - `act <json|@file>`: execute one or many actions.
 - `snapshot <url>`: print token-optimized snapshot JSON.
 
+`run` live timeline modes:
+- `--live-timeline --live-timeline-mode row` (default)
+- `--live-timeline --live-timeline-mode tui` (interactive terminal pane)
+
 ### Replay and diagnostics
 - `replay <trace>`: deterministic replay (strict/relaxed).
 - `flake <trace>`: repeated replay mismatch analysis.
