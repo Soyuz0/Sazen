@@ -55,7 +55,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 
 ## Current Build Status
 - Implemented: headed Chromium runtime, atomic action execution, snapshot/diff engine, observer pipeline, trace save/replay, session save/load.
-- Implemented CLI: `open`, `inspect`, `describe`, `run`, `act`, `snapshot`, `load`, `replay`, `flake`.
+- Implemented CLI: `open`, `inspect`, `describe`, `run`, `act`, `snapshot`, `load`, `profile-save`, `profile-load`, `replay`, `flake`, `timeline`, `timeline-html`, `bundle`, `visual-diff`.
 - Implemented deterministic defaults: reduced motion, random/time shims, layout-shift capture.
 - Implemented tests: contract + snapshot unit tests, integration tests for real app flow + replay + session load + ambiguous role disambiguation.
 - Implemented batch validation runner: `npm run smoke:sites` for sequential multi-site coverage with JSON summary output.
@@ -78,6 +78,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented visual assertion primitives (`selector_bbox_min`, `selector_overlap_max`).
 - Implemented interactive timeline HTML report generation (`timeline-html`).
 - Implemented screenshot-based visual regression overlays (`visual-diff`).
+- Implemented element-aware screenshot annotations for executed actions (target box + center marker).
+- Implemented live timeline output during `run` (`--live-timeline`) and JSONL timeline streaming (`--timeline-stream`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -116,6 +118,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Replaced unstable ebay smoke flow with books.toscrape flow for deterministic e-commerce-style coverage.
 - Added profile command wrappers to simplify session save/load workflows for role-based testing.
 - Added CLI-level visual diff thresholding and fail conditions for regression gating.
+- Added annotated screenshot artifacts in action results and timeline entries.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -130,6 +133,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Resilient selector healing:** rank fallback locators so small DOM changes do not break actions.
 - **Trace-scoped role switching:** profile selection directly inside action scripts and replay sessions.
 - **Visual diff assertions:** compare screenshots against stored baselines within assert actions.
+- **Live timeline TUI:** terminal pane with auto-updating action timeline and artifact links during execution.
 
 ### Medium-Term (v1)
 - **Parallel session scheduler:** run multiple isolated agent sessions concurrently with stable resource control.
@@ -145,8 +149,19 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Human checkpoint handoff:** pause for approval and let humans take over headed sessions in place.
 - **Trace provenance query layer:** answer "why this action" using a searchable action/event graph.
 
+## Agent-IDE Integration (Planned)
+- **OpenCode integration adapter:** first-class command wrapper and JSON-RPC bridge so OpenCode agents can send actions and receive structured results without parsing CLI text.
+- **Claude Code integration adapter:** slash-command oriented bridge and stable output schema for autonomous browser workflows in Claude Code sessions.
+- **OpenAI Codex integration adapter:** lightweight local service exposing action/replay/timeline endpoints with deterministic schema for Codex tool use.
+- **Unified SDK contract:** one shared TypeScript/JSON schema for all three integrations to avoid per-agent drift.
+
+## Pause/Resume Runtime (Planned)
+- **Execution pause control:** explicit pause/resume commands while an agent run is active.
+- **Intervention journal:** capture how long execution was paused and a post-resume snapshot diff.
+- **User-intervention detection:** when resumed, detect and record key user changes made during pause (URL, major DOM diffs, storage deltas where available).
+- **Run provenance markers:** timeline entries indicating pause start/end and subsequent agent reconciliation steps.
+
 ## Feature Gaps Found During Dogfooding
-- **Action timeline UI:** live-updating timeline view while session runs (current timeline UI is post-run/report-based).
 - **Consent/cookie strategy hooks:** extend generic accept/reject logic with site-specific adapters and region-aware variants.
 - **Timeline inspector UI:** richer grouping/searching and per-action deep panes beyond current HTML table/filters.
-- **Element-aware visual overlays:** annotate diff images with target node boxes and semantic labels.
+- **Element-aware diff overlays:** annotate visual diff images with both target node boxes and semantic labels.

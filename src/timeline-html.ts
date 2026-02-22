@@ -44,11 +44,12 @@ export function buildTimelineHtmlDocument(input: {
 }): string {
   const rows = input.timeline
     .map((entry) => {
-      const screenshot = entry.screenshotPath
-        ? `<a href="${escapeHtml(fileUrl(entry.screenshotPath))}" target="_blank" rel="noopener">open</a>`
+      const artifactPath = entry.annotatedScreenshotPath ?? entry.screenshotPath;
+      const screenshot = artifactPath
+        ? `<a href="${escapeHtml(fileUrl(artifactPath))}" target="_blank" rel="noopener">open</a>`
         : "";
-      const preview = entry.screenshotPath
-        ? `<img loading="lazy" src="${escapeHtml(fileUrl(entry.screenshotPath))}" alt="screenshot" />`
+      const preview = artifactPath
+        ? `<img loading="lazy" src="${escapeHtml(fileUrl(artifactPath))}" alt="screenshot" />`
         : "";
 
       return `
@@ -110,7 +111,7 @@ export function buildTimelineHtmlDocument(input: {
         <th>Events</th>
         <th>Diff</th>
         <th>URL</th>
-        <th>Shot</th>
+        <th>Artifact</th>
       </tr>
     </thead>
     <tbody id="rows">

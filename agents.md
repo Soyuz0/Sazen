@@ -105,3 +105,4 @@ These rules define how autonomous agents should operate when using this browser 
 ## 16) Completion Discipline
 - Continue implementing planned scope iteratively without stopping at intermediate milestones.
 - Only pause for completion reporting after tests pass and no high-priority plan items remain for the current phase.
+- If the user explicitly says "don't stop until done", keep executing plan items and validations until a full pass is achieved.

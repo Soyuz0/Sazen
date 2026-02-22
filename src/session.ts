@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
+import { annotateActionScreenshot } from "./annotate.js";
 import { parseAction } from "./contracts.js";
 import {
   applyDeterministicSettings,
@@ -15,6 +16,7 @@ import type {
   ActionResult,
   AgentNode,
   AgentSessionOptions,
+  BoundingBox,
   DomSnapshot,
   NodeTarget,
   ObserverEvent,
@@ -33,6 +35,7 @@ const DEFAULT_OPTIONS: Required<
     | "slowMoMs"
     | "stabilityProfile"
     | "screenshotMode"
+    | "annotateScreenshots"
     | "redactionPack"
     | "viewportWidth"
     | "viewportHeight"
@@ -47,6 +50,7 @@ const DEFAULT_OPTIONS: Required<
   slowMoMs: 0,
   stabilityProfile: "balanced",
   screenshotMode: "viewport",
+  annotateScreenshots: true,
   redactionPack: "default",
   viewportWidth: 1440,
   viewportHeight: 920,
@@ -148,11 +152,13 @@ export class AgentSession {
 
     let status: ActionResult["status"] = "ok";
     let resolvedNodeId: string | undefined;
+    let resolvedBoundingBox: BoundingBox | undefined;
     let error: ActionResult["error"] | undefined;
 
     try {
       const execution = await this.executeAction(action, preSnapshot);
       resolvedNodeId = execution.resolvedNodeId;
+      resolvedBoundingBox = execution.resolvedBoundingBox;
       await this.waitForStability(action, getActionTimeout(action));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
@@ -192,8 +198,23 @@ export class AgentSession {
     }
 
     let screenshotPath: string | undefined;
+    let annotatedScreenshotPath: string | undefined;
     try {
       screenshotPath = await this.captureScreenshot(actionId);
+      if (screenshotPath && (this.options.annotateScreenshots ?? DEFAULT_OPTIONS.annotateScreenshots)) {
+        try {
+          annotatedScreenshotPath = await annotateActionScreenshot({
+            screenshotPath,
+            action,
+            resolvedNodeId,
+            resolvedBoundingBox,
+            snapshot: preSnapshot
+          });
+        } catch (annotationError) {
+          const message = annotationError instanceof Error ? annotationError.message : String(annotationError);
+          error = appendError(error, `Screenshot annotation failed: ${message}`);
+        }
+      }
     } catch (shotError) {
       const message = shotError instanceof Error ? shotError.message : String(shotError);
       error = appendError(error, `Screenshot capture failed: ${message}`);
@@ -215,7 +236,9 @@ export class AgentSession {
       events,
       performance,
       screenshotPath,
+      annotatedScreenshotPath,
       resolvedNodeId,
+      resolvedBoundingBox,
       error
     };
 
@@ -246,7 +269,8 @@ export class AgentSession {
       postDomHash: result.postSnapshot.domHash,
       domDiffSummary: result.domDiff.summary,
       eventCount: result.events.length,
-      screenshotPath: result.screenshotPath
+      screenshotPath: result.screenshotPath,
+      annotatedScreenshotPath: result.annotatedScreenshotPath
     });
 
     noteOriginFromUrl(this.requiredOrigins, result.postSnapshot.url);
@@ -334,7 +358,10 @@ export class AgentSession {
     this.observer = null;
   }
 
-  private async executeAction(action: Action, preSnapshot: DomSnapshot): Promise<{ resolvedNodeId?: string }> {
+  private async executeAction(
+    action: Action,
+    preSnapshot: DomSnapshot
+  ): Promise<{ resolvedNodeId?: string; resolvedBoundingBox?: BoundingBox }> {
     const page = this.requirePage();
 
     switch (action.type) {
@@ -349,40 +376,49 @@ export class AgentSession {
       case "click": {
         const resolved = await this.resolveLocator(action.nodeId, action.target, preSnapshot);
         const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
-        await this.runLocatorAction(
+        const execution = await this.runLocatorAction(
           resolved,
           timeout,
           async (locator, attemptTimeout) => {
             await locator.click({ timeout: attemptTimeout });
           }
         );
-        return { resolvedNodeId: resolved.node?.id };
+        return {
+          resolvedNodeId: resolved.node?.id,
+          resolvedBoundingBox: execution.resolvedBoundingBox
+        };
       }
 
       case "fill": {
         const resolved = await this.resolveLocator(action.nodeId, action.target, preSnapshot);
         const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
-        await this.runLocatorAction(
+        const execution = await this.runLocatorAction(
           resolved,
           timeout,
           async (locator, attemptTimeout) => {
             await locator.fill(action.value, { timeout: attemptTimeout });
           }
         );
-        return { resolvedNodeId: resolved.node?.id };
+        return {
+          resolvedNodeId: resolved.node?.id,
+          resolvedBoundingBox: execution.resolvedBoundingBox
+        };
       }
 
       case "select": {
         const resolved = await this.resolveLocator(action.nodeId, action.target, preSnapshot);
         const timeout = action.timeoutMs ?? this.options.actionTimeoutMs ?? DEFAULT_OPTIONS.actionTimeoutMs;
-        await this.runLocatorAction(
+        const execution = await this.runLocatorAction(
           resolved,
           timeout,
           async (locator, attemptTimeout) => {
             await locator.selectOption(action.value, { timeout: attemptTimeout });
           }
         );
-        return { resolvedNodeId: resolved.node?.id };
+        return {
+          resolvedNodeId: resolved.node?.id,
+          resolvedBoundingBox: execution.resolvedBoundingBox
+        };
       }
 
       case "press": {
@@ -582,7 +618,7 @@ export class AgentSession {
     resolved: ResolvedLocator,
     timeoutMs: number,
     run: (locator: Locator, timeoutMs: number) => Promise<void>
-  ): Promise<void> {
+  ): Promise<{ resolvedBoundingBox?: BoundingBox }> {
     const errors: string[] = [];
 
     const perAttemptTimeout = Math.max(
@@ -592,8 +628,18 @@ export class AgentSession {
 
     for (const candidate of resolved.candidates) {
       try {
+        const box = await candidate.locator.boundingBox().catch(() => null);
         await run(candidate.locator, perAttemptTimeout);
-        return;
+        return {
+          resolvedBoundingBox: box
+            ? {
+                x: box.x,
+                y: box.y,
+                width: box.width,
+                height: box.height
+              }
+            : undefined
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message.split("\n")[0] : String(error);
         errors.push(`${candidate.label}: ${message}`);

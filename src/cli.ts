@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import process from "node:process";
 import { Command } from "commander";
@@ -53,6 +53,7 @@ function configureOpenCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--save <name>", "Save session on exit")
@@ -91,6 +92,7 @@ function configureInspectCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--limit <n>", "Max rows to print", "40")
@@ -131,11 +133,14 @@ function configureRunCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--trace <path>", "Write trace JSON to this path")
     .option("--save <name>", "Save session on completion")
     .option("--logs", "Print captured events after each action", false)
+    .option("--live-timeline", "Print timeline rows as actions complete", false)
+    .option("--timeline-stream <path>", "Write live timeline JSONL stream to file")
     .action(async (scriptPath: string, options: Record<string, string | boolean>) => {
       const absolutePath = resolve(scriptPath);
       const raw = await readFile(absolutePath, "utf8");
@@ -149,11 +154,38 @@ function configureRunCommand(root: Command): void {
       await session.start();
 
       let failedActions = 0;
+      let printedTimelineHeader = false;
       try {
         for (const [index, action] of script.actions.entries()) {
           console.log(`\nAction ${index + 1}/${script.actions.length}: ${action.type}`);
           const result = await session.perform(action as Action);
           printActionResult(result, Boolean(options.logs));
+
+          if (Boolean(options.liveTimeline)) {
+            if (!printedTimelineHeader) {
+              console.log("  # | action | status | duration | events | diff | url");
+              printedTimelineHeader = true;
+            }
+            console.log(`  ${formatTimelineEntry(index, result)}`);
+          }
+
+          if (typeof options.timelineStream === "string" && options.timelineStream.length > 0) {
+            const record = {
+              index,
+              actionId: result.actionId,
+              actionType: result.action.type,
+              status: result.status,
+              durationMs: result.durationMs,
+              events: result.events.length,
+              domDiff: result.domDiff.summary,
+              url: result.postSnapshot.url,
+              screenshotPath: result.screenshotPath,
+              annotatedScreenshotPath: result.annotatedScreenshotPath,
+              timestamp: result.finishedAt
+            };
+            await appendFile(resolve(options.timelineStream), `${JSON.stringify(record)}\n`, "utf8");
+          }
+
           if (result.status !== "ok") {
             failedActions += 1;
           }
@@ -190,6 +222,7 @@ function configureActionCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--logs", "Print captured events", true)
@@ -227,6 +260,7 @@ function configureSnapshotCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (url: string, options: Record<string, string | boolean>) => {
@@ -254,6 +288,7 @@ function configureDescribeCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--max-elements <n>", "Max interactive elements in output", "80")
@@ -288,6 +323,7 @@ function configureReplayCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .option("--preflight-timeout <ms>", "Preflight timeout per origin in ms", "4000")
@@ -341,6 +377,7 @@ function configureProfileSaveCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (name: string, url: string, options: Record<string, string | boolean>) => {
@@ -386,6 +423,7 @@ function configureProfileLoadCommand(root: Command): void {
     .option("--stability-profile <profile>", "Stability profile: fast|balanced|chatty")
     .option("--viewport <size>", "Viewport size as WIDTHxHEIGHT")
     .option("--screenshot-mode <mode>", "Screenshot mode: viewport|fullpage")
+    .option("--no-annotate-screenshots", "Disable screenshot action overlays")
     .option("--redaction-pack <pack>", "Redaction pack: default|strict|off")
     .option("--raw-logs", "Disable log noise filtering", false)
     .action(async (name: string, options: Record<string, string | boolean>) => {
@@ -424,6 +462,7 @@ function configureTimelineCommand(root: Command): void {
     .option("--status <status>", "Filter by action status")
     .option("--action <type>", "Filter by action type")
     .option("--artifacts", "Show screenshot path per row", false)
+    .option("--annotated-artifacts", "Prefer annotated screenshots in artifact output", false)
     .option("--json", "Print timeline as JSON", false)
     .action(async (tracePath: string, options: Record<string, string | boolean>) => {
       const { absolutePath, trace } = await loadSavedTrace(tracePath);
@@ -477,8 +516,15 @@ function configureTimelineCommand(root: Command): void {
           ].join(" | ")
         );
 
-        if (Boolean(options.artifacts) && entry.screenshotPath) {
-          console.log(`    screenshot: ${entry.screenshotPath}`);
+        if (Boolean(options.artifacts)) {
+          const artifactPath = Boolean(options.annotatedArtifacts)
+            ? entry.annotatedScreenshotPath ?? entry.screenshotPath
+            : entry.screenshotPath ?? entry.annotatedScreenshotPath;
+
+          if (artifactPath) {
+            const label = artifactPath === entry.annotatedScreenshotPath ? "annotated" : "screenshot";
+            console.log(`    ${label}: ${artifactPath}`);
+          }
         }
       }
     });
@@ -505,12 +551,15 @@ function configureBundleCommand(root: Command): void {
       const screenshots = timeline
         .map((entry) => entry.screenshotPath)
         .filter((path): path is string => typeof path === "string");
+      const annotatedScreenshots = timeline
+        .map((entry) => entry.annotatedScreenshotPath)
+        .filter((path): path is string => typeof path === "string");
 
       const copiedScreenshots: string[] = [];
-      if (Boolean(options.copyArtifacts) && screenshots.length > 0) {
+      if (Boolean(options.copyArtifacts) && screenshots.length + annotatedScreenshots.length > 0) {
         const screenshotsDir = join(bundleDir, "screenshots");
         await mkdir(screenshotsDir, { recursive: true });
-        for (const screenshotPath of screenshots) {
+        for (const screenshotPath of [...screenshots, ...annotatedScreenshots]) {
           const targetPath = join(screenshotsDir, basename(screenshotPath));
           try {
             await copyFile(screenshotPath, targetPath);
@@ -528,6 +577,7 @@ function configureBundleCommand(root: Command): void {
         totalActions: timeline.length,
         failedActions: timeline.filter((entry) => entry.status !== "ok").length,
         screenshots,
+        annotatedScreenshots,
         copiedScreenshots,
         timeline
       };
@@ -539,6 +589,7 @@ function configureBundleCommand(root: Command): void {
       console.log(`- Trace: ${traceCopyPath}`);
       console.log(`- Manifest: ${manifestPath}`);
       console.log(`- Screenshot refs: ${screenshots.length}`);
+      console.log(`- Annotated refs: ${annotatedScreenshots.length}`);
       if (Boolean(options.copyArtifacts)) {
         console.log(`- Screenshots copied: ${copiedScreenshots.length}`);
       }
@@ -579,6 +630,7 @@ function configureVisualDiffCommand(root: Command): void {
     .option("--threshold <n>", "Pixelmatch threshold (0-1)", "0.1")
     .option("--fail-ratio <n>", "Fail when mismatch ratio exceeds this value", "0.01")
     .option("--max-steps <n>", "Max number of steps to compare")
+    .option("--annotated", "Use annotated screenshots when available", false)
     .option("--json", "Print report as JSON", false)
     .option("--no-write-diffs", "Skip writing diff images")
     .action(async (baselineTrace: string, candidateTrace: string, options: Record<string, string | boolean>) => {
@@ -586,7 +638,8 @@ function configureVisualDiffCommand(root: Command): void {
         outDir: typeof options.out === "string" ? options.out : "reports/visual-diff",
         threshold: toNumber(options.threshold, 0.1),
         maxSteps: toNumber(options.maxSteps, Number.MAX_SAFE_INTEGER),
-        writeDiffImages: options.writeDiffs !== false
+        writeDiffImages: options.writeDiffs !== false,
+        preferAnnotatedArtifacts: Boolean(options.annotated)
       });
 
       if (Boolean(options.json)) {
@@ -716,6 +769,10 @@ function toSessionOptions(options: Record<string, string | boolean>): AgentSessi
     result.logNoiseFiltering = false;
   }
 
+  if (isFlagPresent("--no-annotate-screenshots")) {
+    result.annotateScreenshots = false;
+  }
+
   return result;
 }
 
@@ -815,11 +872,28 @@ function printActionResult(result: ActionResult, printEvents: boolean): void {
     console.log(`screenshot: ${result.screenshotPath}`);
   }
 
+  if (result.annotatedScreenshotPath) {
+    console.log(`annotated: ${result.annotatedScreenshotPath}`);
+  }
+
   if (printEvents) {
     for (const event of result.events) {
       console.log(`  ${formatEvent(event)}`);
     }
   }
+}
+
+function formatTimelineEntry(index: number, result: ActionResult): string {
+  const diff = `${result.domDiff.summary.added}/${result.domDiff.summary.removed}/${result.domDiff.summary.changed}`;
+  return [
+    String(index + 1).padStart(2, " "),
+    pad(result.action.type, 11),
+    pad(result.status, 15),
+    pad(`${result.durationMs}ms`, 10),
+    pad(String(result.events.length), 6),
+    pad(diff, 9),
+    truncate(result.postSnapshot.url || "(unknown)", 70)
+  ].join(" | ");
 }
 
 function toNumber(raw: string | boolean | undefined, fallback: number): number {
@@ -892,4 +966,8 @@ async function safeCloseSession(session: AgentSession): Promise<void> {
     }
     throw error;
   }
+}
+
+function isFlagPresent(flag: string): boolean {
+  return process.argv.includes(flag);
 }

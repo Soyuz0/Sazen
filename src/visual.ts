@@ -25,13 +25,15 @@ export interface CompareTraceVisualOptions {
   threshold?: number;
   maxSteps?: number;
   writeDiffImages?: boolean;
+  preferAnnotatedArtifacts?: boolean;
 }
 
 const DEFAULT_TRACE_OPTIONS: Required<CompareTraceVisualOptions> = {
   outDir: "reports/visual-diff",
   threshold: 0.1,
   maxSteps: Number.MAX_SAFE_INTEGER,
-  writeDiffImages: true
+  writeDiffImages: true,
+  preferAnnotatedArtifacts: false
 };
 
 export async function comparePngFiles(
@@ -111,24 +113,27 @@ export async function compareTraceVisuals(
     const candidateEntry = candidateTimeline[index];
     const actionType = candidateEntry?.actionType ?? baselineEntry?.actionType ?? "snapshot";
 
+    const baselineArtifact = chooseArtifactPath(baselineEntry, effective.preferAnnotatedArtifacts);
+    const candidateArtifact = chooseArtifactPath(candidateEntry, effective.preferAnnotatedArtifacts);
+
     const entry: VisualDiffEntry = {
       index,
       actionType,
-      baselineScreenshotPath: baselineEntry?.screenshotPath,
-      candidateScreenshotPath: candidateEntry?.screenshotPath,
+      baselineScreenshotPath: baselineArtifact,
+      candidateScreenshotPath: candidateArtifact,
       status: "ok",
       mismatchPixels: 0,
       totalPixels: 0,
       mismatchRatio: 0
     };
 
-    if (!baselineEntry?.screenshotPath) {
+    if (!baselineArtifact) {
       entry.status = "missing_baseline";
       resultEntries.push(entry);
       continue;
     }
 
-    if (!candidateEntry?.screenshotPath) {
+    if (!candidateArtifact) {
       entry.status = "missing_candidate";
       resultEntries.push(entry);
       continue;
@@ -139,7 +144,7 @@ export async function compareTraceVisuals(
       : undefined;
 
     try {
-      const compared = await comparePngFiles(baselineEntry.screenshotPath, candidateEntry.screenshotPath, {
+      const compared = await comparePngFiles(baselineArtifact, candidateArtifact, {
         threshold: effective.threshold,
         diffPath
       });
@@ -174,4 +179,19 @@ export async function compareTraceVisuals(
   };
 
   return report;
+}
+
+function chooseArtifactPath(
+  entry: { screenshotPath?: string; annotatedScreenshotPath?: string } | undefined,
+  preferAnnotated: boolean
+): string | undefined {
+  if (!entry) {
+    return undefined;
+  }
+
+  if (preferAnnotated) {
+    return entry.annotatedScreenshotPath ?? entry.screenshotPath;
+  }
+
+  return entry.screenshotPath ?? entry.annotatedScreenshotPath;
 }

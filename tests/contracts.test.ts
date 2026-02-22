@@ -9,6 +9,7 @@ describe("contracts", () => {
         deterministic: true,
         stabilityProfile: "chatty",
         screenshotMode: "fullpage",
+        annotateScreenshots: false,
         redactionPack: "strict",
         viewportWidth: 1280,
         viewportHeight: 800
@@ -32,6 +33,7 @@ describe("contracts", () => {
     expect(parsed.settings?.viewportWidth).toBe(1280);
     expect(parsed.settings?.stabilityProfile).toBe("chatty");
     expect(parsed.settings?.screenshotMode).toBe("fullpage");
+    expect(parsed.settings?.annotateScreenshots).toBe(false);
     expect(parsed.settings?.redactionPack).toBe("strict");
   });
 

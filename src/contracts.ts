@@ -151,6 +151,7 @@ export const scriptSchema = z.object({
       slowMoMs: z.number().int().nonnegative().optional(),
       stabilityProfile: z.enum(["fast", "balanced", "chatty"]).optional(),
       screenshotMode: z.enum(["viewport", "fullpage"]).optional(),
+      annotateScreenshots: z.boolean().optional(),
       redactionPack: z.enum(["default", "strict", "off"]).optional(),
       viewportWidth: z.number().int().positive().optional(),
       viewportHeight: z.number().int().positive().optional(),

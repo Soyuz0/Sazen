@@ -1,156 +1,251 @@
-# Agent Browser (v0)
+# Agent Browser
 
-Agent-first browser runtime built on Playwright Chromium, optimized for deterministic testing and real-time observability.
+Agent Browser is an **agent-first Chromium runtime** for deterministic web testing.
 
-## What exists now
-- Headed Chromium runtime (visible by default).
-- Atomic action API with structured result envelopes.
-- DOM snapshots with stable node IDs and semantic metadata.
-- Per-action DOM diffs.
-- Console/network/error capture.
-- Real-time log streaming in CLI.
-- Session save/load and trace replay.
+In one line: it lets an autonomous agent act in a browser with structured, replayable state (DOM diffs, logs, network, screenshots, timeline, visual diffs), while humans can still watch/debug what happened.
 
-## Install
+## Quick Start
+
+```bash
+npm install
+npm run install:browser
+
+# local fixture app
+npm run fixture
+
+# run scripted flow headless and save trace
+npm run dev -- run examples/sample-flow.json --headless --trace traces/sample-trace.json
+
+# stream live timeline rows while run executes
+npm run dev -- run examples/sample-flow.json --headless --live-timeline --timeline-stream reports/runtime-logs/live.jsonl
+
+# replay, inspect timeline, and build triage bundle
+npm run dev -- replay traces/sample-trace.json --mode relaxed
+npm run dev -- timeline traces/sample-trace.json --artifacts
+npm run dev -- bundle traces/sample-trace.json --copy-artifacts
+```
+
+---
+
+## What This Project Does
+
+### For agents
+- Executes atomic actions (`navigate`, `click`, `fill`, `assert`, `handleConsent`, etc.).
+- Returns structured post-action output (status, DOM diff, events, timings, screenshots).
+- Supports deterministic replay (`strict` and `relaxed` modes) and flake detection.
+
+### For humans
+- Can run headed and watch the page live.
+- Can inspect post-run timeline (terminal table, HTML report, bundles).
+- Can compare visual changes between runs (diff overlays).
+
+### For teams
+- Produces reproducible artifacts under repo paths (`traces/`, `reports/`, `.agent-browser/`).
+- Supports cross-site smoke batches with timeout guards.
+- Supports profile save/load for reusable authenticated sessions.
+
+---
+
+## Installation
+
+### Requirements
+- Node.js 20+
+- Linux/macOS/Windows with Chromium deps for Playwright
+
+### Setup
+
 ```bash
 npm install
 npm run install:browser
 ```
 
-## Quick start
-```bash
-# open browser and keep it visible
-npm run dev -- open https://example.com
+---
 
-# inspect interactive DOM nodes
-npm run dev -- inspect https://example.com
+## Core Concepts
 
-# generate agent-oriented page description + issue hints
-npm run dev -- describe https://example.com --viewport 1280x720
+### 1) Atomic action model
+Every step is a typed action and returns a typed result envelope.
 
-# run scripted actions
-npm run dev -- run examples/sample-flow.json --trace traces/sample-trace.json
+### 2) Structured state over pixels
+The runtime captures semantic DOM snapshots, diffs, and event streams.
 
-# run scripted actions headless (recommended for long test loops)
-npm run dev -- run examples/sample-flow.json --headless
+### 3) Deterministic-first execution
+Supports reduced motion, deterministic timing/random behavior, replay checks, and stable wait profiles.
 
-# load a previously saved session
-npm run dev -- load my-session
+### 4) Artifact-rich debugging
+Each action can emit screenshots (and annotated overlays), logs, network events, timeline entries, and diff metadata.
 
-# replay a trace
-npm run dev -- replay traces/sample-trace.json
+---
 
-# replay with relaxed invariants + preflight
-npm run dev -- replay traces/sample-trace.json --mode relaxed
+## Commands
 
-# detect flaky actions across repeated replays
-npm run dev -- flake traces/sample-trace.json --runs 5 --mode strict
+### Browser/session commands
+- `open <url>`: open URL and stream live events.
+- `inspect <url>`: print interactive node map.
+- `describe <url>`: emit agent-oriented page description JSON.
+- `load <sessionName>`: load saved session and keep running.
+- `profile-save <name> <url>`: save reusable profile session.
+- `profile-load <name>`: load reusable profile.
 
-# inspect stored trace timeline
-npm run dev -- timeline traces/sample-trace.json --limit 20
+### Execution commands
+- `run <script.json>`: execute action script.
+- `act <json|@file>`: execute one or many actions.
+- `snapshot <url>`: print token-optimized snapshot JSON.
 
-# render interactive timeline HTML report
-npm run dev -- timeline-html traces/sample-trace.json
+### Replay and diagnostics
+- `replay <trace>`: deterministic replay (strict/relaxed).
+- `flake <trace>`: repeated replay mismatch analysis.
+- `timeline <trace>`: terminal timeline view.
+- `timeline-html <trace>`: interactive HTML timeline report.
+- `bundle <trace>`: triage bundle (trace + manifest + artifacts refs).
+- `visual-diff <baselineTrace> <candidateTrace>`: screenshot diff overlays.
 
-# compare visual regressions between two traces
-npm run dev -- visual-diff traces/baseline.json traces/candidate.json
+### Batch validation
+- `npm run smoke:sites`: cross-site smoke matrix runner.
 
-# create a triage bundle for sharing/debugging
-npm run dev -- bundle traces/sample-trace.json
+---
 
-# save/load named auth profile (manual login flow)
-npm run dev -- profile-save my-admin http://localhost:3000/login
-npm run dev -- profile-load my-admin
+## Action Script Format
 
-# non-interactive profile save/load for CI smoke checks
-npm run dev -- profile-save ci-profile http://localhost:4173 --headless --auto-save-ms 2000
-npm run dev -- profile-load ci-profile --headless --close-after-ms 2000
-
-# run cross-site smoke matrix
-npm run smoke:sites
-```
-
-## Fixture app for local testing
-```bash
-npm run fixture
-```
-Then open `http://localhost:4173`.
-
-## Tests
-```bash
-npm test
-```
-
-## Site matrix smoke runs
-- Flow files live in `examples/site-flows`.
-- `npm run smoke:sites` runs all site flows and writes `reports/site-matrix-summary.json`.
-- Runtime logs/artifacts can be kept in `reports/` and `.agent-browser/` (no `/tmp` requirement).
-- Optional timeout guards: `npm run smoke:sites -- --operation-timeout-ms 60000 --action-timeout-ms 30000`.
-
-## Replay modes
-- `strict`: action post-state DOM hash must match trace exactly.
-- `relaxed`: compares action status and normalized post-action URL (useful for dynamic pages).
-- In relaxed mode, selector invariants from `waitFor(selector)` actions are checked by default.
-- Disable selector checks with `--no-selector-invariants`.
-- Replay runs preflight URL reachability checks by default; disable with `--no-preflight`.
-
-## Assertions and consent helpers
-- Action scripts can include assertion steps:
+Action scripts are JSON with optional `settings` + ordered `actions`.
 
 ```json
-{ "type": "assert", "condition": { "kind": "selector", "selector": "#status", "textContains": "ready" } }
+{
+  "settings": {
+    "headed": false,
+    "deterministic": true,
+    "stabilityProfile": "balanced",
+    "captureScreenshots": true,
+    "screenshotMode": "viewport"
+  },
+  "actions": [
+    { "type": "setViewport", "width": 1366, "height": 768 },
+    { "type": "navigate", "url": "http://localhost:4173" },
+    { "type": "fill", "target": { "kind": "css", "selector": "#email" }, "value": "a@b.com" },
+    { "type": "click", "target": { "kind": "roleName", "role": "button", "name": "Sign in" } },
+    {
+      "type": "assert",
+      "condition": { "kind": "selector", "selector": "#status", "textContains": "Welcome" }
+    },
+    { "type": "snapshot" }
+  ]
+}
 ```
 
-- Visual/positional assertions are supported too:
+### Assertion conditions
+- `selector` (state + optional textContains)
+- `selector_bbox_min` (min width/height)
+- `selector_overlap_max` (max overlap ratio between two selectors)
+- `url_contains`
+- `title_contains`
 
-```json
-{ "type": "assert", "condition": { "kind": "selector_bbox_min", "selector": "button", "minWidth": 44, "minHeight": 24 } }
-```
-
-```json
-{ "type": "assert", "condition": { "kind": "selector_overlap_max", "selectorA": "#cta", "selectorB": "#modal", "maxOverlapRatio": 0.0 } }
-```
-
-- Built-in consent helper for cookie walls:
+### Consent helper
 
 ```json
 { "type": "handleConsent", "mode": "accept", "requireFound": true }
 ```
 
-## Stability profiles
-- `--stability-profile fast|balanced|chatty` tunes quiet-window and network-idle budgets.
-- Use `chatty` for heavily streaming pages; use `fast` for speed-focused deterministic checks.
+---
 
-## Timeline and bundles
-- `timeline` supports `--status`, `--action`, `--artifacts`, and `--json` output modes.
-- `timeline-html` creates an interactive HTML timeline view with screenshot previews and client-side filtering.
-- `bundle` creates a triage package in `reports/triage-bundles/` with trace + timeline manifest + screenshot references.
-- Add `--copy-artifacts` to copy screenshot files into the bundle directory.
+## Runtime/CLI Configuration
 
-## Visual diffs
-- `visual-diff` compares screenshots from two traces step-by-step.
-- It writes diff overlays to `reports/visual-diff/` by default and can fail when differences exceed `--fail-ratio`.
+Common options (available on most execution commands):
 
-## Resolution / viewport
-- Set viewport for any CLI run with `--viewport WIDTHxHEIGHT` (example: `--viewport 1920x1080`).
-- You can also set viewport inside action scripts via:
+- `--headless`
+- `--no-deterministic`
+- `--slowmo <ms>`
+- `--stability-profile fast|balanced|chatty`
+- `--viewport WIDTHxHEIGHT`
+- `--screenshot-mode viewport|fullpage`
+- `--no-annotate-screenshots`
+- `--redaction-pack default|strict|off`
+- `--raw-logs`
 
-```json
-{ "type": "setViewport", "width": 1366, "height": 768 }
+### Stability profiles
+- `fast`: smaller stability windows, quickest runs.
+- `balanced`: default general-purpose profile.
+- `chatty`: larger waits for streaming/noisy sites.
+
+### Screenshot behavior
+- `viewport` (default): less rendering churn/flicker.
+- `fullpage`: full-page capture; heavier and may trigger more reflow work.
+- Annotated screenshots are enabled by default and mark target location for action steps when resolvable.
+- Use `--no-annotate-screenshots` to disable per-action overlay markers.
+
+### Redaction packs
+- `default`: masks common secrets (tokens/passwords/auth headers).
+- `strict`: stronger masking (cookies/API keys/emails).
+- `off`: no built-in redaction.
+
+---
+
+## Artifacts and Output Layout
+
+- `traces/`: saved trace files.
+- `reports/runtime-logs/`: command logs.
+- `reports/runtime-logs/*.jsonl`: optional live timeline streams from `run --timeline-stream`.
+- `reports/site-matrix-summary.json`: matrix summary.
+- `reports/timeline-html/`: timeline HTML reports.
+- `reports/visual-diff/`: visual diff images/reports.
+- `reports/triage-bundles/`: packaged triage outputs.
+- `.agent-browser/artifacts/`: screenshots and action artifacts.
+- `.agent-browser/sessions/`: saved sessions.
+- `.agent-browser/profiles/`: saved profiles.
+
+---
+
+## Practical Workflows
+
+### Local website debugging with an agent
+1. Run app locally.
+2. Execute flow script with `run`.
+3. Use `describe` to inspect semantic+positional state.
+4. Use `timeline` / `timeline-html` / `bundle` for root cause.
+
+### Regression gate
+1. Capture baseline trace.
+2. Capture candidate trace.
+3. Run `replay` and `visual-diff`.
+4. Fail CI when mismatch exceeds threshold.
+
+### Flaky test analysis
+1. Run `flake` on a trace.
+2. Inspect unstable actions.
+3. Re-run with `stability-profile chatty` and compare.
+
+---
+
+## Examples
+
+- Local fixture login flow: `examples/sample-flow.json`
+- Consent wall flow: `examples/consent-flow.json`
+- Public multi-site flows: `examples/site-flows/*.json`
+
+---
+
+## Testing
+
+```bash
+npm run typecheck
+npm test
+npm run build
+
+# cross-site smoke batch (timeout guarded)
+npm run smoke:sites -- --operation-timeout-ms 60000 --action-timeout-ms 30000 --stability-profile balanced
 ```
 
-## Screenshot capture mode
-- `--screenshot-mode viewport` (default): captures only visible viewport, reduces visual flashing.
-- `--screenshot-mode fullpage`: captures full page (can trigger additional rendering/scroll work).
+---
 
-## Log noise filtering
-- Noise filtering is enabled by default (suppresses common low-signal noise like favicon 404s).
-- Use `--raw-logs` on commands to see the full unfiltered event stream.
+## Current Scope vs Planned
 
-## Redaction packs
-- `--redaction-pack default`: baseline secret masking (tokens/passwords/auth headers).
-- `--redaction-pack strict`: stronger masking (adds cookies/API keys/emails).
-- `--redaction-pack off`: disable built-in masking (use carefully).
+Implemented now:
+- action runtime + structured snapshots/diffs/events
+- replay/flake/timeline/timeline-html/bundle/visual-diff
+- assertion DSL, consent helper, profiles, stability modes
+- annotated per-action screenshots
 
-## Script format
-See `examples/sample-flow.json`.
+Planned (tracked in `.plan`):
+- live timeline pane during active execution (not only post-run report)
+- element-aware visual diff labels/boxes
+- pause/resume with intervention journaling
+- first-class integrations for OpenCode, Claude Code, OpenAI Codex

@@ -279,7 +279,9 @@ export interface ActionResult {
   events: ObserverEvent[];
   performance: PerformanceMetrics;
   screenshotPath?: string;
+  annotatedScreenshotPath?: string;
   resolvedNodeId?: string;
+  resolvedBoundingBox?: BoundingBox;
   error?: {
     message: string;
     stack?: string;
@@ -316,6 +318,7 @@ export interface TraceTimelineEntry {
   domDiffSummary: DomDiffSummary;
   eventCount: number;
   screenshotPath?: string;
+  annotatedScreenshotPath?: string;
 }
 
 export interface SavedTrace {
@@ -342,6 +345,7 @@ export interface AgentSessionOptions {
   slowMoMs?: number;
   stabilityProfile?: "fast" | "balanced" | "chatty";
   screenshotMode?: "viewport" | "fullpage";
+  annotateScreenshots?: boolean;
   redactionPack?: "default" | "strict" | "off";
   viewportWidth?: number;
   viewportHeight?: number;

@@ -7,3 +7,4 @@ export * from "./replay.js";
 export * from "./trace.js";
 export * from "./timeline-html.js";
 export * from "./visual.js";
+export * from "./annotate.js";
