@@ -51,6 +51,8 @@ npm run dev -- replay traces/sample-trace.json --mode relaxed
 npm run dev -- timeline traces/sample-trace.json --artifacts --annotated-artifacts
 npm run dev -- bundle traces/sample-trace.json --copy-artifacts
 npm run dev -- timeline-html traces/sample-trace.json
+npm run dev -- selector-health traces/sample-trace.json
+npm run dev -- run-index traces/sample-trace.json
 ```
 
 Use timeline HTML presets and diff-only focus mode for long traces when narrowing to high-signal rows.

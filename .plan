@@ -99,6 +99,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented timeline HTML filter presets and diff-only focus mode for long traces.
 - Implemented configurable intervention journal retention policy (`maxInterventionsRetained` / `--max-interventions-retained`).
 - Implemented severity-based intervention retention mode (`interventionRetentionMode: severity`) to preserve high-impact interventions when trimming.
+- Implemented selector health reporting (`selector-health`) with fallback/ambiguity/timeout metrics and target hotspots.
+- Implemented canonical run artifact indexing (`run-index`) linking trace, timeline HTML, screenshots, visual diffs, bundle manifests, and top errors.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -153,6 +155,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added unit coverage for timeline HTML preset/diff-only control rendering.
 - Added integration coverage for intervention retention policy in session and adapter state flows.
 - Added integration coverage for severity-based retention preference (high-impact interventions retained over low-impact entries).
+- Added unit coverage for selector health metric aggregation and run index artifact linkage discovery.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
@@ -207,8 +210,8 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 ### Prioritized Post-Dogfooding Additions (Impact vs Effort)
 - **P0 - Completed: Graceful interrupt/shutdown hardening** (idempotent session/adapter shutdown, cancellable interrupt waiters, close-race noise suppression).
 - **P0 - Completed: First-class feedback-loop runner** (`loop` execution mode with action->observe->branch semantics, snapshot/assert predicates, and max-iteration control).
-- **P1 - Selector health report (High impact, Medium effort):** emit selector fragility metrics (fallback depth, timeout frequency, ambiguity count) after runs and smoke matrix batches.
-- **P1 - Artifact manifest index (Medium impact, Low effort):** produce a single run index that links trace, timeline, screenshots, visual diffs, and top errors for external tool ingestion. (Partial: `bundle.json` currently links trace/timeline/screenshots/interventions.)
+- **P1 - Completed: Selector health report** with trace-driven fallback/ambiguity/timeout metrics and per-target hotspots.
+- **P1 - Completed: Artifact manifest index** via `run-index` JSON + bundle-linked run index snapshots.
 - **P1 - Network-aware wait primitives (Medium impact, Medium effort):** add action conditions for response/status/body predicates to reduce DOM-only synchronization flake.
 - **P2 - Auto-retry with evidence policy (Medium impact, Medium effort):** optional bounded retries that persist per-attempt evidence and a final retry rationale.
 - **P2 - Session identity clarity in adapter responses (Medium impact, Low effort):** standardize and document adapter `sessionId` vs runtime `sessionId` fields to avoid client confusion.

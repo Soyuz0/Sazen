@@ -5,6 +5,8 @@ export * from "./observer.js";
 export * from "./session.js";
 export * from "./loop.js";
 export * from "./live-timeline.js";
+export * from "./selector-health.js";
+export * from "./run-index.js";
 export * from "./replay.js";
 export * from "./trace.js";
 export * from "./timeline-html.js";

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import process from "node:process";
 import { parseScript } from "./contracts.js";
+import { buildSelectorHealthReport } from "./selector-health.js";
 import { AgentSession } from "./session.js";
+import { loadSavedTrace } from "./trace.js";
 import type { Action, AgentSessionOptions } from "./types.js";
 
 interface SiteRunSummary {
@@ -16,6 +18,7 @@ interface SiteRunSummary {
   durationMs: number;
   status: "ok" | "failed";
   tracePath: string;
+  selectorHealthPath?: string;
 }
 
 interface MatrixSummary {
@@ -29,6 +32,13 @@ interface MatrixSummary {
   };
   totalSites: number;
   failedSites: number;
+  selectorHealthTotals: {
+    selectorActions: number;
+    fallbackUsed: number;
+    ambiguous: number;
+    failures: number;
+    timeoutFailures: number;
+  };
   sites: SiteRunSummary[];
 }
 
@@ -54,6 +64,13 @@ async function main(): Promise<void> {
   await mkdir(resolve("traces"), { recursive: true });
 
   const summaries: SiteRunSummary[] = [];
+  const selectorHealthTotals = {
+    selectorActions: 0,
+    fallbackUsed: 0,
+    ambiguous: 0,
+    failures: 0,
+    timeoutFailures: 0
+  };
 
   for (const file of files) {
     const scriptPath = join(flowsDir, file);
@@ -78,6 +95,7 @@ async function main(): Promise<void> {
     const session = new AgentSession(sessionOptions);
     let failedActions = 0;
     let timedOut = false;
+    let selectorHealthPath: string | undefined;
     let startSucceeded = false;
     try {
       await withTimeout(
@@ -127,6 +145,18 @@ async function main(): Promise<void> {
           operationTimeoutMs,
           `Timed out while saving trace for '${siteName}'`
         );
+
+        const loaded = await loadSavedTrace(tracePath);
+        const selectorHealth = buildSelectorHealthReport(loaded.trace, loaded.absolutePath);
+        selectorHealthPath = resolve("reports/selector-health", `site-${siteName}.selector-health.json`);
+        await mkdir(dirname(selectorHealthPath), { recursive: true });
+        await writeFile(selectorHealthPath, JSON.stringify(selectorHealth, null, 2), "utf8");
+
+        selectorHealthTotals.selectorActions += selectorHealth.totals.selectorActions;
+        selectorHealthTotals.fallbackUsed += selectorHealth.totals.fallbackUsed;
+        selectorHealthTotals.ambiguous += selectorHealth.totals.ambiguous;
+        selectorHealthTotals.failures += selectorHealth.totals.failures;
+        selectorHealthTotals.timeoutFailures += selectorHealth.totals.timeoutFailures;
       }
     } finally {
       if (startSucceeded) {
@@ -150,7 +180,8 @@ async function main(): Promise<void> {
       timedOut,
       durationMs: Date.now() - startedAt,
       status: failedActions === 0 && !timedOut ? "ok" : "failed",
-      tracePath
+      tracePath,
+      selectorHealthPath
     });
   }
 
@@ -166,6 +197,7 @@ async function main(): Promise<void> {
     },
     totalSites: summaries.length,
     failedSites,
+    selectorHealthTotals,
     sites: summaries
   };
 

@@ -88,6 +88,14 @@ interface ResolvedLocator {
   node?: AgentNode;
 }
 
+interface SelectorDiagnostics {
+  targetLabel: string;
+  candidateCount: number;
+  selectedCandidateIndex?: number;
+  selectedCandidateLabel?: string;
+  attemptedCandidateCount: number;
+}
+
 interface ActiveInterventionWindow {
   startedAt: number;
   sources: Set<string>;
@@ -293,6 +301,7 @@ export class AgentSession {
     let status: ActionResult["status"] = "ok";
     let resolvedNodeId: string | undefined;
     let resolvedBoundingBox: BoundingBox | undefined;
+    let selectorDiagnostics: SelectorDiagnostics | undefined;
     let pauseElapsedMs: number | undefined;
     let error: ActionResult["error"] | undefined;
 
@@ -300,6 +309,7 @@ export class AgentSession {
       const execution = await this.executeAction(action, preSnapshot);
       resolvedNodeId = execution.resolvedNodeId;
       resolvedBoundingBox = execution.resolvedBoundingBox;
+      selectorDiagnostics = execution.selectorDiagnostics;
       pauseElapsedMs = execution.pauseElapsedMs;
       await this.waitForStability(action, getActionTimeout(action));
       page = this.requirePage();
@@ -399,6 +409,7 @@ export class AgentSession {
       annotatedScreenshotPath,
       resolvedNodeId,
       resolvedBoundingBox,
+      selectorDiagnostics,
       pauseSummary:
         action.type === "pause"
           ? {
@@ -429,6 +440,11 @@ export class AgentSession {
         postTitle: result.postSnapshot.title,
         postInteractiveCount: result.postSnapshot.interactiveCount,
         waitForSelector: extractSelectorInvariant(action),
+        selectorTarget: result.selectorDiagnostics?.targetLabel,
+        selectorCandidateCount: result.selectorDiagnostics?.candidateCount,
+        selectorFallbackDepth: result.selectorDiagnostics?.selectedCandidateIndex,
+        selectorAttemptedCount: result.selectorDiagnostics?.attemptedCandidateCount,
+        selectorSelectedCandidate: result.selectorDiagnostics?.selectedCandidateLabel,
         networkErrorCount: result.events.filter(
           (event) => event.kind === "network" && event.phase === "request_failed"
         ).length,
@@ -620,7 +636,12 @@ export class AgentSession {
   private async executeAction(
     action: Action,
     preSnapshot: DomSnapshot
-  ): Promise<{ resolvedNodeId?: string; resolvedBoundingBox?: BoundingBox; pauseElapsedMs?: number }> {
+  ): Promise<{
+    resolvedNodeId?: string;
+    resolvedBoundingBox?: BoundingBox;
+    pauseElapsedMs?: number;
+    selectorDiagnostics?: SelectorDiagnostics;
+  }> {
     const page = this.requirePage();
 
     switch (action.type) {
@@ -644,7 +665,14 @@ export class AgentSession {
         );
         return {
           resolvedNodeId: resolved.node?.id,
-          resolvedBoundingBox: execution.resolvedBoundingBox
+          resolvedBoundingBox: execution.resolvedBoundingBox,
+          selectorDiagnostics: {
+            targetLabel: resolved.targetLabel,
+            candidateCount: execution.candidateCount,
+            selectedCandidateIndex: execution.selectedCandidateIndex,
+            selectedCandidateLabel: execution.selectedCandidateLabel,
+            attemptedCandidateCount: execution.attemptedCandidateCount
+          }
         };
       }
 
@@ -660,7 +688,14 @@ export class AgentSession {
         );
         return {
           resolvedNodeId: resolved.node?.id,
-          resolvedBoundingBox: execution.resolvedBoundingBox
+          resolvedBoundingBox: execution.resolvedBoundingBox,
+          selectorDiagnostics: {
+            targetLabel: resolved.targetLabel,
+            candidateCount: execution.candidateCount,
+            selectedCandidateIndex: execution.selectedCandidateIndex,
+            selectedCandidateLabel: execution.selectedCandidateLabel,
+            attemptedCandidateCount: execution.attemptedCandidateCount
+          }
         };
       }
 
@@ -676,7 +711,14 @@ export class AgentSession {
         );
         return {
           resolvedNodeId: resolved.node?.id,
-          resolvedBoundingBox: execution.resolvedBoundingBox
+          resolvedBoundingBox: execution.resolvedBoundingBox,
+          selectorDiagnostics: {
+            targetLabel: resolved.targetLabel,
+            candidateCount: execution.candidateCount,
+            selectedCandidateIndex: execution.selectedCandidateIndex,
+            selectedCandidateLabel: execution.selectedCandidateLabel,
+            attemptedCandidateCount: execution.attemptedCandidateCount
+          }
         };
       }
 
@@ -889,7 +931,13 @@ export class AgentSession {
     resolved: ResolvedLocator,
     timeoutMs: number,
     run: (locator: Locator, timeoutMs: number) => Promise<void>
-  ): Promise<{ resolvedBoundingBox?: BoundingBox }> {
+  ): Promise<{
+    resolvedBoundingBox?: BoundingBox;
+    candidateCount: number;
+    selectedCandidateIndex?: number;
+    selectedCandidateLabel?: string;
+    attemptedCandidateCount: number;
+  }> {
     const errors: string[] = [];
 
     const perAttemptTimeout = Math.max(
@@ -897,11 +945,15 @@ export class AgentSession {
       Math.floor(timeoutMs / Math.max(1, resolved.candidates.length))
     );
 
-    for (const candidate of resolved.candidates) {
+    for (const [index, candidate] of resolved.candidates.entries()) {
       try {
         const box = await candidate.locator.boundingBox().catch(() => null);
         await run(candidate.locator, perAttemptTimeout);
         return {
+          candidateCount: resolved.candidates.length,
+          selectedCandidateIndex: index,
+          selectedCandidateLabel: candidate.label,
+          attemptedCandidateCount: index + 1,
           resolvedBoundingBox: box
             ? {
                 x: box.x,

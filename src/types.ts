@@ -310,6 +310,13 @@ export interface ActionResult {
   annotatedScreenshotPath?: string;
   resolvedNodeId?: string;
   resolvedBoundingBox?: BoundingBox;
+  selectorDiagnostics?: {
+    targetLabel: string;
+    candidateCount: number;
+    selectedCandidateIndex?: number;
+    selectedCandidateLabel?: string;
+    attemptedCandidateCount: number;
+  };
   pauseSummary?: {
     mode: "enter" | "timeout";
     note?: string;
@@ -333,6 +340,11 @@ export interface TraceRecord {
     postTitle?: string;
     postInteractiveCount?: number;
     waitForSelector?: string;
+    selectorTarget?: string;
+    selectorCandidateCount?: number;
+    selectorFallbackDepth?: number;
+    selectorAttemptedCount?: number;
+    selectorSelectedCandidate?: string;
     networkErrorCount?: number;
     eventCount?: number;
     errorMessage?: string;
@@ -543,6 +555,54 @@ export interface LoopRunReport {
   maxIterations: number;
   iterations: LoopIterationResult[];
   stopReason: "branch_break" | "no_branch_match" | "max_iterations" | "step_error";
+}
+
+export interface SelectorHealthTopTarget {
+  target: string;
+  total: number;
+  failures: number;
+  timeouts: number;
+  avgFallbackDepth: number;
+}
+
+export interface SelectorHealthReport {
+  createdAt: string;
+  tracePath?: string;
+  totals: {
+    selectorActions: number;
+    fallbackUsed: number;
+    ambiguous: number;
+    failures: number;
+    timeoutFailures: number;
+  };
+  fallbackDepth: {
+    average: number;
+    max: number;
+    histogram: Record<string, number>;
+  };
+  topTargets: SelectorHealthTopTarget[];
+}
+
+export interface RunArtifactIndex {
+  version: 1;
+  createdAt: string;
+  tracePath: string;
+  summary: {
+    actions: number;
+    failedActions: number;
+  };
+  selectorHealthPath?: string;
+  timelineHtmlPaths: string[];
+  bundleManifestPaths: string[];
+  visualDiffReportPaths: string[];
+  screenshots: string[];
+  annotatedScreenshots: string[];
+  topErrors: Array<{
+    message: string;
+    count: number;
+    sampleActionType?: string;
+    sampleIndex?: number;
+  }>;
 }
 
 export interface ReplayReport {

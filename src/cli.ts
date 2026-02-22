@@ -12,6 +12,8 @@ import { renderLiveTimelineTuiFrame, toLiveTimelineEntry, type LiveTimelineEntry
 import { runLoop } from "./loop.js";
 import { formatEvent } from "./observer.js";
 import { detectFlakes, replayTrace } from "./replay.js";
+import { buildRunArtifactIndex } from "./run-index.js";
+import { buildSelectorHealthReport, formatSelectorHealthSummary } from "./selector-health.js";
 import { AgentSession } from "./session.js";
 import { createAgentPageDescription, tokenOptimizedSnapshot } from "./snapshot.js";
 import { writeTimelineHtmlReport } from "./timeline-html.js";
@@ -39,6 +41,8 @@ configureReplayCommand(program);
 configureFlakeCommand(program);
 configureTimelineCommand(program);
 configureBundleCommand(program);
+configureRunIndexCommand(program);
+configureSelectorHealthCommand(program);
 configureTimelineHtmlCommand(program);
 configureVisualDiffCommand(program);
 configureAdapterStdioCommand(program);
@@ -292,6 +296,9 @@ function configureRunCommand(root: Command): void {
         if (typeof options.trace === "string" && options.trace.length > 0) {
           const tracePath = await session.saveTrace(options.trace);
           console.log(`\nSaved trace -> ${tracePath}`);
+          const companions = await writeTraceCompanionReports(tracePath);
+          console.log(`Selector health -> ${companions.selectorHealthPath}`);
+          console.log(`Run index -> ${companions.runIndexPath}`);
         }
 
         if (typeof options.save === "string" && options.save.length > 0) {
@@ -400,6 +407,9 @@ function configureLoopCommand(root: Command): void {
         if (typeof options.trace === "string" && options.trace.length > 0) {
           const tracePath = await session.saveTrace(options.trace);
           console.log(`\nSaved trace -> ${tracePath}`);
+          const companions = await writeTraceCompanionReports(tracePath);
+          console.log(`Selector health -> ${companions.selectorHealthPath}`);
+          console.log(`Run index -> ${companions.runIndexPath}`);
         }
 
         if (typeof options.save === "string" && options.save.length > 0) {
@@ -801,14 +811,89 @@ function configureBundleCommand(root: Command): void {
       const manifestPath = join(bundleDir, "bundle.json");
       await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 
+      const runIndex = await buildRunArtifactIndex(absolutePath);
+      const runIndexPath = join(bundleDir, "run-index.json");
+      await writeFile(runIndexPath, JSON.stringify(runIndex, null, 2), "utf8");
+
+      await writeFile(
+        manifestPath,
+        JSON.stringify(
+          {
+            ...manifest,
+            topErrors: runIndex.topErrors,
+            linkedTimelineHtml: runIndex.timelineHtmlPaths,
+            linkedVisualDiffReports: runIndex.visualDiffReportPaths,
+            linkedBundleManifests: runIndex.bundleManifestPaths,
+            runIndexPath
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
       console.log(`Bundle created: ${bundleDir}`);
       console.log(`- Trace: ${traceCopyPath}`);
       console.log(`- Manifest: ${manifestPath}`);
+      console.log(`- Run index: ${runIndexPath}`);
       console.log(`- Screenshot refs: ${screenshots.length}`);
       console.log(`- Annotated refs: ${annotatedScreenshots.length}`);
       console.log(`- Interventions: ${(trace.interventions ?? []).length}`);
       if (Boolean(options.copyArtifacts)) {
         console.log(`- Screenshots copied: ${copiedScreenshots.length}`);
+      }
+    });
+}
+
+function configureRunIndexCommand(root: Command): void {
+  root
+    .command("run-index")
+    .description("Build a canonical run artifact index for a trace")
+    .argument("<tracePath>", "Path to trace JSON")
+    .option("--out <path>", "Output file or directory", "reports/run-index")
+    .option("--json", "Print JSON to stdout", false)
+    .action(async (tracePath: string, options: Record<string, string | boolean>) => {
+      const index = await buildRunArtifactIndex(tracePath);
+
+      if (Boolean(options.json)) {
+        console.log(JSON.stringify(index, null, 2));
+      }
+
+      const outputBase = typeof options.out === "string" ? options.out : "reports/run-index";
+      const outPath = resolveJsonOutputPath(outputBase, index.tracePath, "run-index");
+      await mkdir(dirname(outPath), { recursive: true });
+      await writeFile(outPath, JSON.stringify(index, null, 2), "utf8");
+
+      console.log(`Run index: ${outPath}`);
+      console.log(`- timelineHtml links: ${index.timelineHtmlPaths.length}`);
+      console.log(`- visualDiff links: ${index.visualDiffReportPaths.length}`);
+      console.log(`- bundles: ${index.bundleManifestPaths.length}`);
+    });
+}
+
+function configureSelectorHealthCommand(root: Command): void {
+  root
+    .command("selector-health")
+    .description("Analyze selector fragility metrics for a trace")
+    .argument("<tracePath>", "Path to trace JSON")
+    .option("--out <path>", "Output file or directory", "reports/selector-health")
+    .option("--json", "Print JSON to stdout", false)
+    .action(async (tracePath: string, options: Record<string, string | boolean>) => {
+      const loaded = await loadSavedTrace(tracePath);
+      const report = buildSelectorHealthReport(loaded.trace, loaded.absolutePath);
+
+      if (Boolean(options.json)) {
+        console.log(JSON.stringify(report, null, 2));
+      }
+
+      const outputBase = typeof options.out === "string" ? options.out : "reports/selector-health";
+      const outPath = resolveJsonOutputPath(outputBase, loaded.absolutePath, "selector-health");
+      await mkdir(dirname(outPath), { recursive: true });
+      await writeFile(outPath, JSON.stringify(report, null, 2), "utf8");
+
+      console.log(`Selector health: ${outPath}`);
+      for (const line of formatSelectorHealthSummary(report)) {
+        console.log(`- ${line}`);
       }
     });
 }
@@ -1416,6 +1501,39 @@ function parseLiveTimelineMode(raw: string | boolean | undefined): "row" | "tui"
   }
 
   throw new Error(`Invalid live timeline mode '${raw}'. Use row or tui.`);
+}
+
+async function writeTraceCompanionReports(
+  tracePath: string
+): Promise<{ selectorHealthPath: string; runIndexPath: string }> {
+  const loaded = await loadSavedTrace(tracePath);
+  const selectorHealth = buildSelectorHealthReport(loaded.trace, loaded.absolutePath);
+  const selectorHealthPath = resolveJsonOutputPath(
+    "reports/selector-health",
+    loaded.absolutePath,
+    "selector-health"
+  );
+  await mkdir(dirname(selectorHealthPath), { recursive: true });
+  await writeFile(selectorHealthPath, JSON.stringify(selectorHealth, null, 2), "utf8");
+
+  const runIndex = await buildRunArtifactIndex(loaded.absolutePath);
+  const runIndexPath = resolveJsonOutputPath("reports/run-index", loaded.absolutePath, "run-index");
+  await mkdir(dirname(runIndexPath), { recursive: true });
+  await writeFile(runIndexPath, JSON.stringify(runIndex, null, 2), "utf8");
+
+  return {
+    selectorHealthPath,
+    runIndexPath
+  };
+}
+
+function resolveJsonOutputPath(basePath: string, tracePath: string, suffix: string): string {
+  const absoluteBase = resolve(basePath);
+  if (absoluteBase.endsWith(".json")) {
+    return absoluteBase;
+  }
+
+  return join(absoluteBase, `${basename(tracePath, ".json")}.${suffix}.json`);
 }
 
 function toSessionOptions(options: Record<string, string | boolean>): AgentSessionOptions {

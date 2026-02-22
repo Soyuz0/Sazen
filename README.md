@@ -108,6 +108,10 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 - `--live-timeline --live-timeline-mode row` (default)
 - `--live-timeline --live-timeline-mode tui` (interactive terminal pane)
 
+When `run` or `loop` saves a trace (`--trace`), companion outputs are generated automatically:
+- `reports/selector-health/<trace>.selector-health.json`
+- `reports/run-index/<trace>.run-index.json`
+
 ### Replay and diagnostics
 - `replay <trace>`: deterministic replay (strict/relaxed).
 - `flake <trace>`: repeated replay mismatch analysis.
@@ -115,6 +119,8 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 - `timeline-html <trace>`: interactive HTML timeline inspector (grouping, search, presets, diff-only focus, detail pane).
 - `bundle <trace>`: triage bundle (trace + manifest + artifacts refs).
 - `visual-diff <baselineTrace> <candidateTrace>`: screenshot diff overlays.
+- `selector-health <trace>`: selector fragility report (fallback/ambiguity/timeout hotspots).
+- `run-index <trace>`: canonical run artifact index for external ingestion.
 
 ### External agent adapter
 - `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
