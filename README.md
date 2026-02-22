@@ -126,6 +126,11 @@ When `run` or `loop` saves a trace (`--trace`), companion outputs are generated 
 - `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
 - Methods include session lifecycle, action execution, and run controls (`pauseSession`, `resumeSession`, `getSessionState`).
 - MCP-parity aliases are available (`session.pause`, `session.resume`, `session.state`).
+- Session identity fields are explicit in adapter responses:
+  - `adapterSessionId`: adapter-facing handle used in method params.
+  - `runtimeSessionId`: underlying browser runtime session identifier.
+  - `runtimeTabId`: runtime tab identifier (currently `tab_1`).
+- Backward compatibility: action results still include `sessionId`, which equals `runtimeSessionId`.
 
 ### Agent skill doc
 - `AGENT_BROWSER_SKILL.md`: load this into agent contexts as the runtime usage playbook.
@@ -469,6 +474,6 @@ Implemented now:
 - bounded action auto-retry policy with per-attempt evidence + final rationale in traces
 
 Planned (tracked in `.plan`):
-- session identity clarity in adapter responses
 - checkpoint/resume for long flows
+- cross-site drift monitor and consent/login plugin registry
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

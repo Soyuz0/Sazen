@@ -36,6 +36,7 @@ describe("adapter runtime", () => {
   it("creates a session and performs actions", async () => {
     const runtime = new AdapterRuntime();
     let sessionId = "";
+    let runtimeSessionId = "";
 
     try {
       const create = await runtime.handleRequest({
@@ -51,8 +52,18 @@ describe("adapter runtime", () => {
       });
 
       expect(create.ok).toBe(true);
-      sessionId = (create.result as { sessionId: string }).sessionId;
+      const created = create.result as {
+        sessionId: string;
+        adapterSessionId: string;
+        runtimeSessionId: string;
+        runtimeTabId: string;
+      };
+      sessionId = created.sessionId;
+      runtimeSessionId = created.runtimeSessionId;
       expect(sessionId.length).toBeGreaterThan(0);
+      expect(created.adapterSessionId).toBe(sessionId);
+      expect(created.runtimeSessionId.length).toBeGreaterThan(0);
+      expect(created.runtimeTabId).toBe("tab_1");
 
       const navigate = await runtime.handleRequest({
         id: "nav",
@@ -66,6 +77,14 @@ describe("adapter runtime", () => {
         }
       });
       expect(navigate.ok).toBe(true);
+      const navigateResult = navigate.result as {
+        sessionId: string;
+        adapterSessionId: string;
+        runtimeSessionId: string;
+      };
+      expect(navigateResult.adapterSessionId).toBe(sessionId);
+      expect(navigateResult.runtimeSessionId).toBe(runtimeSessionId);
+      expect(navigateResult.sessionId).toBe(runtimeSessionId);
 
       const describe = await runtime.handleRequest({
         id: "describe",
@@ -83,6 +102,47 @@ describe("adapter runtime", () => {
         params: { sessionId }
       });
       expect(close.ok).toBe(true);
+    } finally {
+      await runtime.shutdown();
+    }
+  }, 120_000);
+
+  it("returns explicit adapter/runtime identity fields in session state", async () => {
+    const runtime = new AdapterRuntime();
+
+    try {
+      const created = await runtime.handleRequest({
+        id: "create",
+        method: "createSession",
+        params: {
+          options: {
+            headed: false,
+            deterministic: true,
+            captureScreenshots: false
+          }
+        }
+      });
+      expect(created.ok).toBe(true);
+
+      const createPayload = created.result as {
+        sessionId: string;
+        adapterSessionId: string;
+        runtimeSessionId: string;
+      };
+
+      const state = await runtime.handleRequest({
+        id: "state",
+        method: "getSessionState",
+        params: { sessionId: createPayload.sessionId }
+      });
+      expect(state.ok).toBe(true);
+
+      const statePayload = state.result as {
+        adapterSessionId: string;
+        runtimeSessionId: string;
+      };
+      expect(statePayload.adapterSessionId).toBe(createPayload.adapterSessionId);
+      expect(statePayload.runtimeSessionId).toBe(createPayload.runtimeSessionId);
     } finally {
       await runtime.shutdown();
     }

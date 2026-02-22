@@ -27,6 +27,12 @@ interface SessionEntry {
   };
 }
 
+interface SessionIdentity {
+  adapterSessionId: string;
+  runtimeSessionId: string;
+  runtimeTabId: string;
+}
+
 export class AdapterRuntime {
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly operationLocks = new Map<string, Promise<void>>();
@@ -140,29 +146,48 @@ export class AdapterRuntime {
     }
   }
 
-  private async createSession(params: Record<string, unknown>): Promise<{ sessionId: string }> {
+  private async createSession(params: Record<string, unknown>): Promise<{
+    sessionId: string;
+    adapterSessionId: string;
+    runtimeSessionId: string;
+    runtimeTabId: string;
+  }> {
     const options = (params.options as AgentSessionOptions | undefined) ?? {};
     const session = new AgentSession(options);
     await session.start();
     const sessionId = randomUUID();
-    this.sessions.set(sessionId, {
+    const entry: SessionEntry = {
       id: sessionId,
       session,
       control: {
         runActive: false
       }
-    });
-    return { sessionId };
+    };
+
+    this.sessions.set(sessionId, entry);
+    const identity = this.sessionIdentity(entry);
+    return {
+      sessionId,
+      ...identity
+    };
   }
 
-  private async closeSession(params: Record<string, unknown>): Promise<{ closed: boolean }> {
+  private async closeSession(params: Record<string, unknown>): Promise<{
+    closed: boolean;
+    adapterSessionId: string;
+    runtimeSessionId: string;
+    runtimeTabId: string;
+  }> {
     const sessionId = this.requireSessionId(params.sessionId);
     return this.enqueueSessionOperation(sessionId, async () => {
-      const session = this.requireSession(sessionId);
-      await session.close();
+      const entry = this.requireSessionEntry(sessionId);
+      await entry.session.close();
       this.sessions.delete(sessionId);
       this.operationLocks.delete(sessionId);
-      return { closed: true };
+      return {
+        closed: true,
+        ...this.sessionIdentity(entry)
+      };
     });
   }
 
@@ -174,7 +199,11 @@ export class AdapterRuntime {
       throw new Error("Missing 'action' in performAction params");
     }
     return this.enqueueSessionOperation(sessionId, async () => {
-      return entry.session.perform(action);
+      const result = await entry.session.perform(action);
+      return {
+        ...result,
+        ...this.sessionIdentity(entry)
+      };
     });
   }
 
@@ -201,6 +230,7 @@ export class AdapterRuntime {
         }
 
         return {
+          ...this.sessionIdentity(entry),
           runId,
           count: results.length,
           pausedMs: Math.max(0, entry.session.getExecutionControlState().pausedMs - pauseBaseline),
@@ -219,6 +249,7 @@ export class AdapterRuntime {
     const journal = entry.session.getInterventionJournalState();
 
     return {
+      ...this.sessionIdentity(entry),
       paused: state.paused,
       pausedMs: state.pausedMs,
       sources: state.sources,
@@ -235,6 +266,7 @@ export class AdapterRuntime {
     const journal = entry.session.getInterventionJournalState();
 
     return {
+      ...this.sessionIdentity(entry),
       paused: state.paused,
       pausedMs: state.pausedMs,
       sources: state.sources,
@@ -250,6 +282,7 @@ export class AdapterRuntime {
     const state = entry.session.getExecutionControlState();
     const journal = entry.session.getInterventionJournalState();
     return {
+      ...this.sessionIdentity(entry),
       paused: state.paused,
       runActive: entry.control.runActive,
       runId: entry.control.runId,
@@ -264,7 +297,11 @@ export class AdapterRuntime {
     const sessionId = this.requireSessionId(params.sessionId);
     const entry = this.requireSessionEntry(sessionId);
     return this.enqueueSessionOperation(sessionId, async () => {
-      return entry.session.snapshot();
+      const snapshot = await entry.session.snapshot();
+      return {
+        ...snapshot,
+        ...this.sessionIdentity(entry)
+      };
     });
   }
 
@@ -274,9 +311,13 @@ export class AdapterRuntime {
     const maxElements = Number(params.maxElements ?? 80);
     return this.enqueueSessionOperation(sessionId, async () => {
       const snapshot = await entry.session.snapshot();
-      return createAgentPageDescription(snapshot, {
+      const description = createAgentPageDescription(snapshot, {
         maxElements: Number.isFinite(maxElements) ? maxElements : 80
       });
+      return {
+        ...description,
+        ...this.sessionIdentity(entry)
+      };
     });
   }
 
@@ -288,7 +329,8 @@ export class AdapterRuntime {
       throw new Error("Missing 'filePath' in saveTrace params");
     }
     return this.enqueueSessionOperation(sessionId, async () => ({
-      path: await entry.session.saveTrace(filePath)
+      path: await entry.session.saveTrace(filePath),
+      ...this.sessionIdentity(entry)
     }));
   }
 
@@ -301,7 +343,8 @@ export class AdapterRuntime {
     }
     const rootDir = typeof params.rootDir === "string" ? params.rootDir : undefined;
     return this.enqueueSessionOperation(sessionId, async () => ({
-      path: await entry.session.saveSession(name, rootDir)
+      path: await entry.session.saveSession(name, rootDir),
+      ...this.sessionIdentity(entry)
     }));
   }
 
@@ -341,7 +384,11 @@ export class AdapterRuntime {
     return entry;
   }
 
-  private requireSession(rawSessionId: unknown): AgentSession {
-    return this.requireSessionEntry(rawSessionId).session;
+  private sessionIdentity(entry: SessionEntry): SessionIdentity {
+    return {
+      adapterSessionId: entry.id,
+      runtimeSessionId: entry.session.sessionId,
+      runtimeTabId: entry.session.tabId
+    };
   }
 }

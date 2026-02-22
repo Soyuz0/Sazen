@@ -111,6 +111,7 @@ Notes:
 - Responses can arrive out of order; correlate by `id`.
 - Session operations are serialized per session for safety.
 - MCP-parity aliases are available: `session.pause`, `session.resume`, `session.state`.
+- Use `adapterSessionId` for adapter calls; `runtimeSessionId`/`runtimeTabId` identify the underlying browser runtime entities.
 
 ## Validation Loop (Required)
 
