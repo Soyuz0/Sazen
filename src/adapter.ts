@@ -22,12 +22,8 @@ interface SessionEntry {
   id: string;
   session: AgentSession;
   control: {
-    paused: boolean;
-    pauseStartedAt?: number;
-    totalPausedMs: number;
     runActive: boolean;
     runId?: string;
-    resumeWaiters: Array<() => void>;
   };
 }
 
@@ -133,10 +129,7 @@ export class AdapterRuntime {
       id: sessionId,
       session,
       control: {
-        paused: false,
-        totalPausedMs: 0,
-        runActive: false,
-        resumeWaiters: []
+        runActive: false
       }
     });
     return { sessionId };
@@ -161,7 +154,6 @@ export class AdapterRuntime {
       throw new Error("Missing 'action' in performAction params");
     }
     return this.enqueueSessionOperation(sessionId, async () => {
-      await this.waitIfPaused(entry);
       return entry.session.perform(action);
     });
   }
@@ -180,19 +172,18 @@ export class AdapterRuntime {
     return this.enqueueSessionOperation(sessionId, async () => {
       entry.control.runActive = true;
       entry.control.runId = runId;
-      const pauseBaseline = this.getAccumulatedPauseMs(entry);
+      const pauseBaseline = entry.session.getExecutionControlState().pausedMs;
 
       try {
         const results = [];
         for (const action of actions) {
-          await this.waitIfPaused(entry);
           results.push(await entry.session.perform(action));
         }
 
         return {
           runId,
           count: results.length,
-          pausedMs: Math.max(0, this.getAccumulatedPauseMs(entry) - pauseBaseline),
+          pausedMs: Math.max(0, entry.session.getExecutionControlState().pausedMs - pauseBaseline),
           results
         };
       } finally {
@@ -204,13 +195,12 @@ export class AdapterRuntime {
 
   private async pauseSession(params: Record<string, unknown>): Promise<unknown> {
     const entry = this.requireSessionEntry(params.sessionId);
-    if (!entry.control.paused) {
-      entry.control.paused = true;
-      entry.control.pauseStartedAt = Date.now();
-    }
+    const state = entry.session.pauseExecution("adapter");
 
     return {
-      paused: true,
+      paused: state.paused,
+      pausedMs: state.pausedMs,
+      sources: state.sources,
       runActive: entry.control.runActive,
       runId: entry.control.runId
     };
@@ -218,20 +208,12 @@ export class AdapterRuntime {
 
   private async resumeSession(params: Record<string, unknown>): Promise<unknown> {
     const entry = this.requireSessionEntry(params.sessionId);
-    if (entry.control.paused) {
-      const startedAt = entry.control.pauseStartedAt ?? Date.now();
-      entry.control.totalPausedMs += Math.max(0, Date.now() - startedAt);
-      entry.control.pauseStartedAt = undefined;
-      entry.control.paused = false;
-      const waiters = [...entry.control.resumeWaiters];
-      entry.control.resumeWaiters.length = 0;
-      for (const waiter of waiters) {
-        waiter();
-      }
-    }
+    const state = entry.session.resumeExecution("adapter");
 
     return {
-      paused: false,
+      paused: state.paused,
+      pausedMs: state.pausedMs,
+      sources: state.sources,
       runActive: entry.control.runActive,
       runId: entry.control.runId
     };
@@ -239,11 +221,13 @@ export class AdapterRuntime {
 
   private async getSessionState(params: Record<string, unknown>): Promise<unknown> {
     const entry = this.requireSessionEntry(params.sessionId);
+    const state = entry.session.getExecutionControlState();
     return {
-      paused: entry.control.paused,
+      paused: state.paused,
       runActive: entry.control.runActive,
       runId: entry.control.runId,
-      pausedMs: this.getAccumulatedPauseMs(entry)
+      pausedMs: state.pausedMs,
+      sources: state.sources
     };
   }
 
@@ -251,7 +235,6 @@ export class AdapterRuntime {
     const sessionId = this.requireSessionId(params.sessionId);
     const entry = this.requireSessionEntry(sessionId);
     return this.enqueueSessionOperation(sessionId, async () => {
-      await this.waitIfPaused(entry);
       return entry.session.snapshot();
     });
   }
@@ -261,7 +244,6 @@ export class AdapterRuntime {
     const entry = this.requireSessionEntry(sessionId);
     const maxElements = Number(params.maxElements ?? 80);
     return this.enqueueSessionOperation(sessionId, async () => {
-      await this.waitIfPaused(entry);
       const snapshot = await entry.session.snapshot();
       return createAgentPageDescription(snapshot, {
         maxElements: Number.isFinite(maxElements) ? maxElements : 80
@@ -292,27 +274,6 @@ export class AdapterRuntime {
     return this.enqueueSessionOperation(sessionId, async () => ({
       path: await entry.session.saveSession(name, rootDir)
     }));
-  }
-
-  private async waitIfPaused(entry: SessionEntry): Promise<void> {
-    if (!entry.control.paused) {
-      return;
-    }
-
-    await new Promise<void>((resolvePromise) => {
-      if (!entry.control.paused) {
-        resolvePromise();
-        return;
-      }
-      entry.control.resumeWaiters.push(resolvePromise);
-    });
-  }
-
-  private getAccumulatedPauseMs(entry: SessionEntry): number {
-    if (!entry.control.paused || !entry.control.pauseStartedAt) {
-      return entry.control.totalPausedMs;
-    }
-    return entry.control.totalPausedMs + Math.max(0, Date.now() - entry.control.pauseStartedAt);
   }
 
   private enqueueSessionOperation<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {

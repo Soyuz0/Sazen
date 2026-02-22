@@ -107,6 +107,9 @@ Each action can emit screenshots (and annotated overlays), logs, network events,
 - `adapter-stdio`: line-delimited JSON adapter server over stdio for coding agents and tool runners.
 - Methods include session lifecycle, action execution, and run controls (`pauseSession`, `resumeSession`, `getSessionState`).
 
+### Agent skill doc
+- `AGENT_BROWSER_SKILL.md`: load this into agent contexts as the runtime usage playbook.
+
 ### Batch validation
 - `npm run smoke:sites`: cross-site smoke matrix runner.
 
@@ -152,6 +155,11 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
   - `timeout`: resume after `timeoutMs`
   - `enter`: wait for Enter (or timeout fallback)
 - Result metadata includes `pauseSummary` with elapsed time and whether URL/DOM changed during pause.
+
+### Browser overlay controls
+- By default, pages include a small top-right runtime panel with `Pause` and `Resume`.
+- Overlay pause blocks the next automated action until resumed.
+- Overlay elements are excluded from DOM snapshots/diffs so runtime controls do not pollute hashes.
 
 ### Consent helper
 

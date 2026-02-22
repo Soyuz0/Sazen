@@ -356,6 +356,7 @@ export interface SavedSession {
 
 export interface AgentSessionOptions {
   headed?: boolean;
+  browserOverlay?: boolean;
   deterministic?: boolean;
   slowMoMs?: number;
   stabilityProfile?: "fast" | "balanced" | "chatty";

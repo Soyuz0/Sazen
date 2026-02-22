@@ -152,6 +152,7 @@ export const scriptSchema = z.object({
   settings: z
     .object({
       headed: z.boolean().optional(),
+      browserOverlay: z.boolean().optional(),
       deterministic: z.boolean().optional(),
       slowMoMs: z.number().int().nonnegative().optional(),
       stabilityProfile: z.enum(["fast", "balanced", "chatty"]).optional(),

@@ -2,6 +2,10 @@
 
 These rules define how autonomous agents should operate when using this browser runtime.
 
+## Skill Loading
+- Load `AGENT_BROWSER_SKILL.md` as operational context before running complex browser tasks.
+- Treat the skill doc as the execution playbook (command patterns, adapter protocol, validation loop).
+
 ## 1) Safety and Scope
 - Only act on allowlisted domains or explicit user-provided URLs.
 - Never submit destructive actions (delete, purchase, transfer) unless explicitly instructed.

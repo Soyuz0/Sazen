@@ -335,6 +335,10 @@ export async function takeDomSnapshot(
     const nodes: RawNode[] = [];
 
     for (const el of allElements) {
+      if (el.closest("[data-agent-browser-overlay='root']")) {
+        continue;
+      }
+
       const role = resolveRole(el);
       const name = resolveName(el);
       const path = cssPath(el);

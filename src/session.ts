@@ -31,6 +31,7 @@ const DEFAULT_OPTIONS: Required<
   Pick<
     AgentSessionOptions,
     | "headed"
+    | "browserOverlay"
     | "deterministic"
     | "slowMoMs"
     | "stabilityProfile"
@@ -46,6 +47,7 @@ const DEFAULT_OPTIONS: Required<
   >
 > = {
   headed: true,
+  browserOverlay: true,
   deterministic: true,
   slowMoMs: 0,
   stabilityProfile: "balanced",
@@ -96,12 +98,17 @@ export class AgentSession {
   private readonly requiredOrigins = new Set<string>();
   private readonly mockRules: MockRule[] = [];
   private mockRoutingReady = false;
+  private readonly executionPauseSources = new Set<string>();
+  private executionPauseStartedAt: number | undefined;
+  private executionPausedMsTotal = 0;
+  private readonly executionResumeWaiters: Array<() => void> = [];
 
   constructor(private readonly options: AgentSessionOptions = {}) {}
 
   async start(): Promise<void> {
+    const headed = this.options.headed ?? DEFAULT_OPTIONS.headed;
     this.browser = await chromium.launch({
-      headless: !(this.options.headed ?? DEFAULT_OPTIONS.headed),
+      headless: !headed,
       slowMo: this.options.slowMoMs ?? DEFAULT_OPTIONS.slowMoMs
     });
 
@@ -114,6 +121,10 @@ export class AgentSession {
     });
 
     this.page = await this.context.newPage();
+
+    if (this.options.browserOverlay ?? DEFAULT_OPTIONS.browserOverlay) {
+      await this.installBrowserOverlay();
+    }
 
     await installLayoutShiftCapture(this.page);
     if (this.options.deterministic ?? DEFAULT_OPTIONS.deterministic) {
@@ -141,10 +152,45 @@ export class AgentSession {
     return this.observer.subscribe(listener);
   }
 
+  pauseExecution(source = "api"): { paused: boolean; pausedMs: number; sources: string[] } {
+    if (!this.executionPauseSources.has(source)) {
+      if (this.executionPauseSources.size === 0) {
+        this.executionPauseStartedAt = Date.now();
+      }
+      this.executionPauseSources.add(source);
+    }
+
+    return this.getExecutionControlState();
+  }
+
+  resumeExecution(source = "api"): { paused: boolean; pausedMs: number; sources: string[] } {
+    if (this.executionPauseSources.delete(source) && this.executionPauseSources.size === 0) {
+      const startedAt = this.executionPauseStartedAt ?? Date.now();
+      this.executionPausedMsTotal += Math.max(0, Date.now() - startedAt);
+      this.executionPauseStartedAt = undefined;
+      const waiters = [...this.executionResumeWaiters];
+      this.executionResumeWaiters.length = 0;
+      for (const waiter of waiters) {
+        waiter();
+      }
+    }
+
+    return this.getExecutionControlState();
+  }
+
+  getExecutionControlState(): { paused: boolean; pausedMs: number; sources: string[] } {
+    return {
+      paused: this.executionPauseSources.size > 0,
+      pausedMs: this.getExecutionPausedMs(),
+      sources: [...this.executionPauseSources].sort((left, right) => left.localeCompare(right))
+    };
+  }
+
   async perform(rawAction: Action): Promise<ActionResult> {
     const action = parseAction(rawAction) as Action;
     const page = this.requirePage();
     const observer = this.requireObserver();
+    await this.waitForExecutionResume();
 
     const startedAt = Date.now();
     const actionId = `action_${++this.actionCounter}`;
@@ -939,6 +985,163 @@ export class AgentSession {
     });
 
     this.mockRoutingReady = true;
+  }
+
+  private async installBrowserOverlay(): Promise<void> {
+    const page = this.requirePage();
+
+    await page.exposeBinding("__agentBrowserControl", async (_source, request: unknown) => {
+      const command =
+        typeof request === "object" && request !== null && "type" in request
+          ? String((request as { type: unknown }).type)
+          : "state";
+
+      if (command === "pause") {
+        return this.pauseExecution("overlay");
+      }
+      if (command === "resume") {
+        return this.resumeExecution("overlay");
+      }
+      if (command === "state") {
+        return this.getExecutionControlState();
+      }
+
+      throw new Error(`Unsupported overlay control command '${command}'`);
+    });
+
+    await page.addInitScript(() => {
+      const globalState = window as Window & {
+        __agentBrowserControl?: (request: { type: string }) => Promise<{
+          paused?: boolean;
+          pausedMs?: number;
+        }>;
+      };
+
+      const rootAttr = "data-agent-browser-overlay";
+      const rootValue = "root";
+
+      const install = () => {
+        if (document.querySelector(`[${rootAttr}='${rootValue}']`)) {
+          return;
+        }
+
+        const root = document.createElement("div");
+        root.setAttribute(rootAttr, rootValue);
+        root.style.position = "fixed";
+        root.style.top = "12px";
+        root.style.right = "12px";
+        root.style.zIndex = "2147483647";
+        root.style.pointerEvents = "none";
+
+        const panel = document.createElement("div");
+        panel.style.pointerEvents = "auto";
+        panel.style.display = "flex";
+        panel.style.gap = "8px";
+        panel.style.alignItems = "center";
+        panel.style.padding = "8px 10px";
+        panel.style.borderRadius = "10px";
+        panel.style.background = "rgba(15, 23, 42, 0.9)";
+        panel.style.color = "#f8fafc";
+        panel.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+        panel.style.fontSize = "12px";
+        panel.style.boxShadow = "0 8px 20px rgba(0,0,0,0.3)";
+
+        const status = document.createElement("span");
+        status.textContent = "running";
+        status.style.minWidth = "88px";
+
+        const pauseButton = document.createElement("button");
+        pauseButton.type = "button";
+        pauseButton.textContent = "Pause";
+        pauseButton.style.border = "0";
+        pauseButton.style.borderRadius = "6px";
+        pauseButton.style.padding = "4px 8px";
+        pauseButton.style.cursor = "pointer";
+        pauseButton.style.fontFamily = "inherit";
+        pauseButton.style.fontSize = "12px";
+        pauseButton.style.background = "#e2e8f0";
+        pauseButton.style.color = "#0f172a";
+
+        const resumeButton = document.createElement("button");
+        resumeButton.type = "button";
+        resumeButton.textContent = "Resume";
+        resumeButton.style.border = "0";
+        resumeButton.style.borderRadius = "6px";
+        resumeButton.style.padding = "4px 8px";
+        resumeButton.style.cursor = "pointer";
+        resumeButton.style.fontFamily = "inherit";
+        resumeButton.style.fontSize = "12px";
+        resumeButton.style.background = "#22c55e";
+        resumeButton.style.color = "#052e16";
+
+        const setPausedState = (paused: boolean, pausedMs: number) => {
+          status.textContent = paused
+            ? `paused (${Math.floor(Math.max(0, pausedMs) / 1000)}s)`
+            : "running";
+          pauseButton.disabled = paused;
+          resumeButton.disabled = !paused;
+          pauseButton.style.opacity = paused ? "0.5" : "1";
+          resumeButton.style.opacity = paused ? "1" : "0.5";
+        };
+
+        const send = async (type: "pause" | "resume" | "state") => {
+          if (!globalState.__agentBrowserControl) {
+            return;
+          }
+
+          try {
+            const state = await globalState.__agentBrowserControl({ type });
+            setPausedState(Boolean(state?.paused), Number(state?.pausedMs ?? 0));
+          } catch {
+            // Ignore overlay update failures.
+          }
+        };
+
+        pauseButton.addEventListener("click", () => {
+          void send("pause");
+        });
+        resumeButton.addEventListener("click", () => {
+          void send("resume");
+        });
+
+        panel.append(status, pauseButton, resumeButton);
+        root.append(panel);
+        document.documentElement.append(root);
+
+        void send("state");
+        window.setInterval(() => {
+          void send("state");
+        }, 1000);
+      };
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", install, { once: true });
+      } else {
+        install();
+      }
+    });
+
+  }
+
+  private async waitForExecutionResume(): Promise<void> {
+    if (this.executionPauseSources.size === 0) {
+      return;
+    }
+
+    await new Promise<void>((resolvePromise) => {
+      if (this.executionPauseSources.size === 0) {
+        resolvePromise();
+        return;
+      }
+      this.executionResumeWaiters.push(resolvePromise);
+    });
+  }
+
+  private getExecutionPausedMs(): number {
+    if (this.executionPauseSources.size === 0 || !this.executionPauseStartedAt) {
+      return this.executionPausedMsTotal;
+    }
+    return this.executionPausedMsTotal + Math.max(0, Date.now() - this.executionPauseStartedAt);
   }
 
   private requirePage(): Page {

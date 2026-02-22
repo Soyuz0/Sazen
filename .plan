@@ -82,6 +82,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented live timeline output during `run` (`--live-timeline`) and JSONL timeline streaming (`--timeline-stream`).
 - Implemented pause action (`pause`) with timeout/enter modes and intervention summary metadata.
 - Implemented adapter runtime run controls: `pauseSession` / `resumeSession` / `getSessionState` with serialized session operations.
+- Implemented in-browser runtime overlay controls (Pause/Resume) wired to session execution state.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -122,6 +123,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Added CLI-level visual diff thresholding and fail conditions for regression gating.
 - Added annotated screenshot artifacts in action results and timeline entries.
 - Added pause action coverage in integration tests and action result metadata.
+- Added overlay-node exclusion in snapshot capture to keep DOM hashes stable while runtime controls are visible.
 
 ## Definition of Done (v0)
 - Browser visible and usable while automation runs.
