@@ -139,6 +139,19 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Trace-scoped role switching:** profile selection directly inside action scripts and replay sessions.
 - **Visual diff assertions:** compare screenshots against stored baselines within assert actions.
 - **Live timeline TUI:** terminal pane with auto-updating action timeline and artifact links during execution.
+- **Context-native screenshot handoff (default-on):** automatically attach produced screenshots to agent execution context by default so next-step decisions can use image feedback without manual file reads.
+
+### Prioritized Post-Dogfooding Additions (Impact vs Effort)
+- **P0 - Graceful interrupt/shutdown hardening (High impact, Low effort):** make `open`/`load`/adapter shutdown idempotent and suppress known close-race noise so SIGINT/timeout exits stay clean.
+- **P0 - First-class feedback-loop runner (High impact, Medium effort):** add a `loop` execution mode that supports action -> observe -> branch with snapshot/assert predicates and optional max-iterations.
+- **P1 - Selector health report (High impact, Medium effort):** emit selector fragility metrics (fallback depth, timeout frequency, ambiguity count) after runs and smoke matrix batches.
+- **P1 - Artifact manifest index (Medium impact, Low effort):** produce a single run index that links trace, timeline, screenshots, visual diffs, and top errors for external tool ingestion.
+- **P1 - Network-aware wait primitives (Medium impact, Medium effort):** add action conditions for response/status/body predicates to reduce DOM-only synchronization flake.
+- **P2 - Auto-retry with evidence policy (Medium impact, Medium effort):** optional bounded retries that persist per-attempt evidence and a final retry rationale.
+- **P2 - Session identity clarity in adapter responses (Medium impact, Low effort):** standardize and document adapter `sessionId` vs runtime `sessionId` fields to avoid client confusion.
+- **P2 - Checkpoint/resume for long flows (Medium impact, High effort):** named checkpoints in scripts with resume-from-checkpoint support after failures.
+- **P3 - Cross-site drift monitor (Medium impact, High effort):** aggregate recurring smoke failures and auto-suggest selector strategy updates.
+- **P3 - Consent/login plugin registry (Low-Medium impact, Medium effort):** domain adapters for recurring consent and login patterns discovered in smoke runs.
 
 ### Medium-Term (v1)
 - **Parallel session scheduler:** run multiple isolated agent sessions concurrently with stable resource control.
@@ -169,3 +182,4 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **Consent/cookie strategy hooks:** extend generic accept/reject logic with site-specific adapters and region-aware variants.
 - **Timeline inspector UI:** richer grouping/searching and per-action deep panes beyond current HTML table/filters.
 - **Element-aware diff overlays:** annotate visual diff images with both target node boxes and semantic labels.
+- **Automatic screenshot context upload:** screenshot-producing commands should default to context attachment so agents can see artifacts immediately in feedback loops.
