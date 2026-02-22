@@ -47,7 +47,7 @@ npm run fixture
 # execute scripted run
 npm run dev -- run examples/sample-flow.json --headless --trace traces/sample-trace.json --live-timeline
 
-# inspect failures or confirm stability
+# inspect outcomes, failures, or stability
 npm run dev -- replay traces/sample-trace.json --mode relaxed
 npm run dev -- timeline traces/sample-trace.json --artifacts
 npm run dev -- timeline-html traces/sample-trace.json

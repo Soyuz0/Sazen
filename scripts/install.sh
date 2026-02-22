@@ -3,14 +3,14 @@ set -euo pipefail
 
 APP="sazen"
 REPO_OWNER="Soyuz0"
-REPO_NAME="sazen"
+REPO_NAME="Sazen"
 DEFAULT_BRANCH="master"
 
-MUTED='\033[0;2m'
-RED='\033[0;31m'
-ORANGE='\033[38;5;214m'
-GREEN='\033[0;32m'
-NC='\033[0m'
+MUTED=$'\033[0;2m'
+RED=$'\033[0;31m'
+ORANGE=$'\033[38;5;214m'
+GREEN=$'\033[0;32m'
+NC=$'\033[0m'
 
 requested_version="${VERSION:-}"
 binary_path=""
@@ -38,8 +38,8 @@ Options:
       --skip-browser-install Skip Playwright Chromium installation
 
 Examples:
-  curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash -s -- --version v0.1.0
+  curl -fsSL https://raw.githubusercontent.com/Soyuz0/Sazen/refs/heads/master/scripts/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/Soyuz0/Sazen/refs/heads/master/scripts/install.sh | bash -s -- --version v0.1.0
   ./scripts/install.sh --binary ./sazen --no-modify-path
 EOF
 }
@@ -56,7 +56,7 @@ print_message() {
     success) color="$GREEN" ;;
   esac
 
-  printf "%b%s%b\n" "$color" "$message" "$NC"
+  printf "%b%s%b\n" "$color" "$message" "$NC" >&2
 }
 
 fail() {
@@ -276,7 +276,7 @@ install_from_source() {
     fi
   else
     print_message warning "Skipped browser install (--skip-browser-install). Run this later:"
-    print_message info "  node \"$app_new_dir/node_modules/playwright/cli.js\" install chromium"
+    print_message info "  node \"$app_dir/node_modules/playwright/cli.js\" install chromium"
   fi
 
   mkdir -p "$install_dir"

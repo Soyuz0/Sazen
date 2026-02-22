@@ -14,7 +14,7 @@ Sazen is an agent-first Chromium runtime for deterministic browser automation.
 
 It is designed for two audiences at the same time:
 - agents that need typed, replayable browser actions
-- humans who need clear visibility, diagnostics, and artifacts when runs fail
+- humans who need clear visibility, diagnostics, and artifacts across browser interactions
 
 The runtime executes atomic actions, captures structured state after each action, and writes trace artifacts that can be replayed, diffed, and triaged.
 
@@ -35,7 +35,7 @@ Requirements:
 Recommended (one-line installer):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/Sazen/refs/heads/master/scripts/install.sh | bash
 ```
 
 The installer supports Linux, macOS, and Windows bash environments (Git Bash/WSL).
@@ -44,13 +44,13 @@ Installer options:
 
 ```bash
 # install a specific release tag or branch
-curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash -s -- --version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/Sazen/refs/heads/master/scripts/install.sh | bash -s -- --version v0.1.0
 
 # skip PATH edits
-curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash -s -- --no-modify-path
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/Sazen/refs/heads/master/scripts/install.sh | bash -s -- --no-modify-path
 
 # skip browser install (run playwright install later)
-curl -fsSL https://raw.githubusercontent.com/Soyuz0/sazen/master/scripts/install.sh | bash -s -- --skip-browser-install
+curl -fsSL https://raw.githubusercontent.com/Soyuz0/Sazen/refs/heads/master/scripts/install.sh | bash -s -- --skip-browser-install
 ```
 
 Manual setup (from source checkout):
