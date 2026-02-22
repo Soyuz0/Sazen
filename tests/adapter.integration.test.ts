@@ -19,6 +19,7 @@ describe("adapter runtime", () => {
       const ping = await runtime.handleRequest({ id: 1, method: "ping" });
       expect(ping.ok).toBe(true);
       const capabilities = (ping.result as { capabilities?: string[] }).capabilities ?? [];
+      expect((ping.result as { sdkContractVersion?: string }).sdkContractVersion).toBe("1.0.0");
       expect(capabilities).toContain("pauseSession");
       expect(capabilities).toContain("resumeSession");
       expect(capabilities).toContain("session.pause");

@@ -122,6 +122,7 @@ Notes:
 - Session operations are serialized per session for safety.
 - MCP-parity aliases are available: `session.pause`, `session.resume`, `session.state`.
 - Use `adapterSessionId` for adapter calls; `runtimeSessionId`/`runtimeTabId` identify the underlying browser runtime entities.
+- Use `ping.sdkContractVersion` to verify compatibility with `src/sdk-contract.ts`.
 
 ## Validation Loop (Required)
 

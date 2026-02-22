@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { AgentSession } from "./session.js";
+import {
+  adapterRequestEnvelopeSchema,
+  SDK_CONTRACT_VERSION,
+  supportedAdapterMethods
+} from "./sdk-contract.js";
 import { createAgentPageDescription } from "./snapshot.js";
 import type { Action, AgentSessionOptions } from "./types.js";
 
@@ -40,9 +45,10 @@ export class AdapterRuntime {
 
   async handleRequest(request: AdapterRequest): Promise<AdapterResponse> {
     try {
-      const result = await this.execute(request.method, request.params ?? {});
+      const parsed = adapterRequestEnvelopeSchema.parse(request);
+      const result = await this.execute(parsed.method, parsed.params ?? {});
       return {
-        id: request.id,
+        id: parsed.id,
         ok: true,
         result
       };
@@ -82,23 +88,8 @@ export class AdapterRuntime {
       case "ping":
         return {
           version: "0.1.0",
-          capabilities: [
-            "createSession",
-            "performAction",
-            "runActions",
-            "pauseSession",
-            "resumeSession",
-            "getSessionState",
-            "session.pause",
-            "session.resume",
-            "session.state",
-            "snapshot",
-            "describe",
-            "saveTrace",
-            "saveSession",
-            "closeSession",
-            "shutdown"
-          ]
+          sdkContractVersion: SDK_CONTRACT_VERSION,
+          capabilities: [...supportedAdapterMethods]
         };
 
       case "createSession":

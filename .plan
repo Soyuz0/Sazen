@@ -110,6 +110,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented drift recommendation layer and CLI reporting (`drift-monitor`) for ranked selector/wait strategy guidance.
 - Implemented consent/login plugin registry core with deterministic plugin ordering (site, CMP, generic) and shared login plugin registration surface.
 - Implemented initial login plugin pack via `handleLogin` action (GitHub-style selectors + generic fallback through registry).
+- Implemented unified SDK contract surface (`src/sdk-contract.ts`) with version handshake via adapter `ping.sdkContractVersion`.
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -246,7 +247,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **OpenCode integration adapter:** first-class command wrapper and JSON-RPC bridge so OpenCode agents can send actions and receive structured results without parsing CLI text.
 - **Claude Code integration adapter:** slash-command oriented bridge and stable output schema for autonomous browser workflows in Claude Code sessions.
 - **OpenAI Codex integration adapter:** lightweight local service exposing action/replay/timeline endpoints with deterministic schema for Codex tool use.
-- **Unified SDK contract:** one shared TypeScript/JSON schema for all three integrations to avoid per-agent drift.
+- **Completed: Unified SDK contract** via `src/sdk-contract.ts` + adapter contract version handshake.
 
 ## Pause/Resume Runtime (Post-Base Follow-Ups)
 - **Completed:** storage/cookie delta journaling with bounded diff samples.

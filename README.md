@@ -135,6 +135,7 @@ When `run` or `loop` saves a trace (`--trace`), companion outputs are generated 
   - `runtimeSessionId`: underlying browser runtime session identifier.
   - `runtimeTabId`: runtime tab identifier (currently `tab_1`).
 - Backward compatibility: action results still include `sessionId`, which equals `runtimeSessionId`.
+- Unified SDK contract is defined in `src/sdk-contract.ts`; `ping` returns `sdkContractVersion` for client handshake.
 
 ### Agent skill doc
 - `AGENT_BROWSER_SKILL.md`: load this into agent contexts as the runtime usage playbook.
