@@ -3,5 +3,9 @@ dist/
 .agent-browser/
 coverage/
 *.log
+*.jsonl
+logs/
+runtime-logs/
 traces/
 reports/
+reports/runtime-logs/
