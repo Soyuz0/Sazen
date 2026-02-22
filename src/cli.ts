@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { createConnection, createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -19,7 +20,7 @@ import { createAgentPageDescription, tokenOptimizedSnapshot } from "./snapshot.j
 import { writeTimelineHtmlReport } from "./timeline-html.js";
 import { getTraceTimeline, loadSavedTrace } from "./trace.js";
 import { compareTraceVisuals } from "./visual.js";
-import type { Action, ActionResult, AgentSessionOptions, ReplayMode } from "./types.js";
+import type { Action, ActionResult, AgentSessionOptions, ReplayMode, SavedSession } from "./types.js";
 
 const program = new Command();
 program
@@ -53,6 +54,24 @@ program.parseAsync(process.argv).catch((error: unknown) => {
   console.error(`Error: ${message}`);
   process.exitCode = 1;
 });
+
+interface CheckpointManifestEntry {
+  name: string;
+  actionIndex: number;
+  actionType: string;
+  sessionManifestPath: string;
+  reachedAt: string;
+  postUrl: string;
+  postDomHash: string;
+}
+
+interface CheckpointManifest {
+  version: 1;
+  scriptPath: string;
+  scriptHash: string;
+  updatedAt: string;
+  checkpoints: Record<string, CheckpointManifestEntry>;
+}
 
 function configureOpenCommand(root: Command): void {
   root
@@ -155,6 +174,8 @@ function configureRunCommand(root: Command): void {
     .option("--live-timeline-mode <mode>", "Live timeline mode: row|tui", "row")
     .option("--timeline-stream <path>", "Write live timeline JSONL stream to file")
     .option("--control-socket <path>", "Enable run control socket at this path")
+    .option("--resume-from-checkpoint <name>", "Resume run from a named checkpoint")
+    .option("--checkpoint-manifest <path>", "Checkpoint manifest path (default under .agent-browser/checkpoints)")
     .option(
       "--max-interventions-retained <n>",
       "Retain at most this many intervention journal entries"
@@ -169,14 +190,36 @@ function configureRunCommand(root: Command): void {
       const absolutePath = resolve(scriptPath);
       const raw = await readFile(absolutePath, "utf8");
       const script = parseScript(JSON.parse(raw));
+      const scriptHash = computeScriptHash(script);
+      const checkpointManifestPath = resolveCheckpointManifestPath(absolutePath, options.checkpointManifest);
+      const resumeCheckpointName =
+        typeof options.resumeFromCheckpoint === "string" && options.resumeFromCheckpoint.length > 0
+          ? options.resumeFromCheckpoint
+          : undefined;
+      const resumeTarget = resumeCheckpointName
+        ? await loadCheckpointResumeTarget({
+            checkpointManifestPath,
+            checkpointName: resumeCheckpointName,
+            scriptPath: absolutePath,
+            scriptHash
+          })
+        : undefined;
       const liveTimelineMode = parseLiveTimelineMode(options.liveTimelineMode);
       const usingLiveTimelineTui =
         Boolean(options.liveTimeline) && liveTimelineMode === "tui" && Boolean(process.stdout.isTTY);
 
-      const session = new AgentSession({
+      const sessionOptions: AgentSessionOptions = {
         ...script.settings,
         ...toSessionOptions(options)
-      });
+      };
+      if (resumeTarget) {
+        sessionOptions.storageStatePath = resumeTarget.session.storageStatePath;
+      }
+
+      const session = new AgentSession(sessionOptions);
+
+      const startActionIndex = resumeTarget ? resumeTarget.actionIndex + 1 : 0;
+      const actionsToRun = script.actions.slice(startActionIndex);
 
       if (typeof options.timelineStream === "string" && options.timelineStream.length > 0) {
         const streamPath = resolve(options.timelineStream);
@@ -208,12 +251,14 @@ function configureRunCommand(root: Command): void {
               getRunState: () => ({
                 currentActionIndex,
                 completedActions,
-                totalActions: script.actions.length,
+                totalActions: actionsToRun.length,
                 runFinished,
                 currentActionType:
-                  currentActionIndex >= 0 && currentActionIndex < script.actions.length
-                    ? script.actions[currentActionIndex].type
-                    : undefined
+                  currentActionIndex >= 0 && currentActionIndex < actionsToRun.length
+                    ? actionsToRun[currentActionIndex].type
+                    : undefined,
+                resumedFromCheckpoint: resumeTarget?.checkpointName,
+                resumedFromActionIndex: resumeTarget?.actionIndex
               })
             })
           : undefined;
@@ -222,10 +267,42 @@ function configureRunCommand(root: Command): void {
           console.log(`Run control socket: ${runControl.socketPath}`);
         }
 
-        for (const [index, action] of script.actions.entries()) {
-          currentActionIndex = index;
+        if (resumeTarget) {
           if (!usingLiveTimelineTui) {
-            console.log(`\nAction ${index + 1}/${script.actions.length}: ${action.type}`);
+            console.log(
+              `Resuming from checkpoint '${resumeTarget.checkpointName}' (action ${resumeTarget.actionIndex + 1}/${script.actions.length})`
+            );
+          }
+          const resumeNav = await session.perform({
+            type: "navigate",
+            url: resumeTarget.session.url,
+            waitUntil: "domcontentloaded"
+          });
+          if (!usingLiveTimelineTui) {
+            printActionResult(resumeNav, false);
+          }
+          if (resumeNav.status !== "ok") {
+            throw new Error(
+              `Unable to restore checkpoint '${resumeTarget.checkpointName}': ${
+                resumeNav.error?.message ?? "navigation failed"
+              }`
+            );
+          }
+        }
+
+        if (!resumeTarget && !usingLiveTimelineTui && script.actions.length > 0) {
+          console.log(`Starting script from action 1/${script.actions.length}`);
+        }
+
+        if (resumeTarget && !usingLiveTimelineTui && actionsToRun.length === 0) {
+          console.log("Checkpoint is at end of script; no remaining actions to run.");
+        }
+
+        for (const [relativeIndex, action] of actionsToRun.entries()) {
+          const absoluteIndex = startActionIndex + relativeIndex;
+          currentActionIndex = relativeIndex;
+          if (!usingLiveTimelineTui) {
+            console.log(`\nAction ${absoluteIndex + 1}/${script.actions.length}: ${action.type}`);
           }
           if (!usingLiveTimelineTui && action.type === "pause" && (action.mode ?? "enter") === "enter") {
             console.log("Pause action active: press Enter to resume (or wait for timeout).");
@@ -241,12 +318,12 @@ function configureRunCommand(root: Command): void {
 
           if (Boolean(options.liveTimeline)) {
             if (usingLiveTimelineTui) {
-              liveTimelineEntries.push(toLiveTimelineEntry(index, result));
+              liveTimelineEntries.push(toLiveTimelineEntry(absoluteIndex, result));
               process.stdout.write(
                 renderLiveTimelineTuiFrame({
                   entries: liveTimelineEntries,
-                  totalActions: script.actions.length,
-                  completedActions: index + 1,
+                  totalActions: actionsToRun.length,
+                  completedActions: relativeIndex + 1,
                   failedActions,
                   startedAt: runStartedAt,
                   scriptPath: absolutePath,
@@ -255,17 +332,37 @@ function configureRunCommand(root: Command): void {
                 })
               );
             } else {
-              if (!printedTimelineHeader) {
-                console.log("  # | action | status | duration | events | diff | url");
-                printedTimelineHeader = true;
+                if (!printedTimelineHeader) {
+                  console.log("  # | action | status | duration | events | diff | url");
+                  printedTimelineHeader = true;
+                }
+              console.log(`  ${formatTimelineEntry(absoluteIndex, result)}`);
+            }
+          }
+
+          if (action.type === "checkpoint" && result.status === "ok" && result.checkpointSummary) {
+            await upsertCheckpointManifestEntry({
+              checkpointManifestPath,
+              scriptPath: absolutePath,
+              scriptHash,
+              checkpoint: {
+                name: result.checkpointSummary.name,
+                actionIndex: absoluteIndex,
+                actionType: action.type,
+                sessionManifestPath: result.checkpointSummary.manifestPath,
+                reachedAt: new Date(result.finishedAt).toISOString(),
+                postUrl: result.postSnapshot.url,
+                postDomHash: result.postSnapshot.domHash
               }
-              console.log(`  ${formatTimelineEntry(index, result)}`);
+            });
+            if (!usingLiveTimelineTui) {
+              console.log(`checkpoint: ${result.checkpointSummary.name} -> ${result.checkpointSummary.manifestPath}`);
             }
           }
 
           if (typeof options.timelineStream === "string" && options.timelineStream.length > 0) {
             const record = {
-              index,
+              index: absoluteIndex,
               actionId: result.actionId,
               actionType: result.action.type,
               status: result.status,
@@ -280,16 +377,14 @@ function configureRunCommand(root: Command): void {
             await appendFile(resolve(options.timelineStream), `${JSON.stringify(record)}\n`, "utf8");
           }
 
-          completedActions = index + 1;
+          completedActions = relativeIndex + 1;
         }
 
         runFinished = true;
 
         if (usingLiveTimelineTui) {
           process.stdout.write("\n");
-          console.log(
-            `Run complete: completed=${completedActions}/${script.actions.length} failed=${failedActions}`
-          );
+          console.log(`Run complete: completed=${completedActions}/${actionsToRun.length} failed=${failedActions}`);
           if (runControl) {
             console.log(`Run control socket: ${runControl.socketPath}`);
           }
@@ -1178,6 +1273,11 @@ function configureRunControlCommand(root: Command): void {
         console.log(
           `- run finished=${response.run.runFinished} current=${currentAction} completed=${response.run.completedActions}/${response.run.totalActions}`
         );
+        if (response.run.resumedFromCheckpoint) {
+          console.log(
+            `- resumedFrom checkpoint=${response.run.resumedFromCheckpoint} actionIndex=${response.run.resumedFromActionIndex}`
+          );
+        }
       }
       if (response.latestIntervention) {
         console.log(
@@ -1214,6 +1314,8 @@ interface RunControlRunState {
   totalActions: number;
   runFinished: boolean;
   currentActionType?: string;
+  resumedFromCheckpoint?: string;
+  resumedFromActionIndex?: number;
 }
 
 interface RunControlResponse {
@@ -1540,6 +1642,142 @@ function resolveJsonOutputPath(basePath: string, tracePath: string, suffix: stri
   return join(absoluteBase, `${basename(tracePath, ".json")}.${suffix}.json`);
 }
 
+function computeScriptHash(script: unknown): string {
+  const canonical = JSON.stringify(script);
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
+}
+
+function resolveCheckpointManifestPath(scriptPath: string, rawPath: string | boolean | undefined): string {
+  if (typeof rawPath === "string" && rawPath.length > 0) {
+    return resolve(rawPath);
+  }
+
+  return resolve(".agent-browser/checkpoints", `${basename(scriptPath, ".json")}.manifest.json`);
+}
+
+async function loadCheckpointResumeTarget(input: {
+  checkpointManifestPath: string;
+  checkpointName: string;
+  scriptPath: string;
+  scriptHash: string;
+}): Promise<{
+  checkpointName: string;
+  actionIndex: number;
+  session: SavedSession;
+}> {
+  const rawManifest = await readFile(input.checkpointManifestPath, "utf8").catch((error) => {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Checkpoint manifest '${input.checkpointManifestPath}' is unavailable for resume: ${reason}`
+    );
+  });
+
+  const parsed = JSON.parse(rawManifest) as CheckpointManifest;
+  if (parsed.version !== 1) {
+    throw new Error(
+      `Unsupported checkpoint manifest version '${String(parsed.version)}' in '${input.checkpointManifestPath}'`
+    );
+  }
+
+  if (parsed.scriptHash !== input.scriptHash) {
+    throw new Error(
+      [
+        `Checkpoint manifest '${input.checkpointManifestPath}' does not match current script content.`,
+        `expectedHash=${input.scriptHash}`,
+        `manifestHash=${parsed.scriptHash}`,
+        "Re-run from start to regenerate checkpoints."
+      ].join(" ")
+    );
+  }
+
+  if (resolve(parsed.scriptPath) !== resolve(input.scriptPath)) {
+    throw new Error(
+      `Checkpoint manifest '${input.checkpointManifestPath}' targets '${parsed.scriptPath}', not '${input.scriptPath}'`
+    );
+  }
+
+  const checkpoint = parsed.checkpoints[input.checkpointName];
+  if (!checkpoint) {
+    const available = Object.keys(parsed.checkpoints).sort((left, right) => left.localeCompare(right));
+    throw new Error(
+      [
+        `Checkpoint '${input.checkpointName}' not found in '${input.checkpointManifestPath}'.`,
+        available.length > 0 ? `Available: ${available.join(", ")}` : "No checkpoints are recorded yet."
+      ].join(" ")
+    );
+  }
+
+  const rawSession = await readFile(resolve(checkpoint.sessionManifestPath), "utf8").catch((error) => {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Checkpoint session manifest '${checkpoint.sessionManifestPath}' is unavailable: ${reason}`
+    );
+  });
+
+  const session = JSON.parse(rawSession) as SavedSession;
+  if (!session.storageStatePath || !session.url) {
+    throw new Error(`Checkpoint session manifest '${checkpoint.sessionManifestPath}' is incomplete`);
+  }
+
+  return {
+    checkpointName: checkpoint.name,
+    actionIndex: checkpoint.actionIndex,
+    session
+  };
+}
+
+async function upsertCheckpointManifestEntry(input: {
+  checkpointManifestPath: string;
+  scriptPath: string;
+  scriptHash: string;
+  checkpoint: CheckpointManifestEntry;
+}): Promise<void> {
+  const existing = await readCheckpointManifest(input.checkpointManifestPath);
+
+  const manifest: CheckpointManifest =
+    existing && existing.scriptHash === input.scriptHash && resolve(existing.scriptPath) === resolve(input.scriptPath)
+      ? existing
+      : {
+          version: 1,
+          scriptPath: resolve(input.scriptPath),
+          scriptHash: input.scriptHash,
+          updatedAt: new Date().toISOString(),
+          checkpoints: {}
+        };
+
+  manifest.scriptPath = resolve(input.scriptPath);
+  manifest.scriptHash = input.scriptHash;
+  manifest.updatedAt = new Date().toISOString();
+  manifest.checkpoints[input.checkpoint.name] = {
+    ...input.checkpoint,
+    sessionManifestPath: resolve(input.checkpoint.sessionManifestPath)
+  };
+
+  await mkdir(dirname(input.checkpointManifestPath), { recursive: true });
+  await writeFile(input.checkpointManifestPath, JSON.stringify(manifest, null, 2), "utf8");
+}
+
+async function readCheckpointManifest(checkpointManifestPath: string): Promise<CheckpointManifest | undefined> {
+  const raw = await readFile(checkpointManifestPath, "utf8").catch((error) => {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (message.includes("enoent") || message.includes("no such file")) {
+      return undefined;
+    }
+    throw error;
+  });
+
+  if (!raw) {
+    return undefined;
+  }
+
+  const parsed = JSON.parse(raw) as CheckpointManifest;
+  if (parsed.version !== 1) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 function toSessionOptions(options: Record<string, string | boolean>): AgentSessionOptions {
   const viewport = parseViewportSize(options.viewport);
   const slowMo = toOptionalNumber(options.slowmo);
@@ -1713,6 +1951,10 @@ function printActionResult(result: ActionResult, printEvents: boolean): void {
     console.log(
       `pause: mode=${result.pauseSummary.mode} elapsed=${result.pauseSummary.elapsedMs}ms urlChanged=${result.pauseSummary.urlChanged} domChanged=${result.pauseSummary.domChanged}`
     );
+  }
+
+  if (result.checkpointSummary) {
+    console.log(`checkpoint: name=${result.checkpointSummary.name} manifest=${result.checkpointSummary.manifestPath}`);
   }
 
   if (result.retry) {

@@ -25,6 +25,9 @@ npm run dev -- run-control state --socket reports/runtime-logs/run-control.sock
 npm run dev -- run-control pause --socket reports/runtime-logs/run-control.sock
 npm run dev -- run-control resume --socket reports/runtime-logs/run-control.sock
 
+# resume from a previously recorded checkpoint
+npm run dev -- run examples/sample-flow.json --resume-from-checkpoint after-login
+
 # pause during a script step (timeout mode example inside script)
 # { "type": "pause", "mode": "timeout", "timeoutMs": 5000, "note": "manual review" }
 
@@ -171,6 +174,7 @@ Action scripts are JSON with optional `settings` + ordered `actions`.
       "profile": "admin",
       "profilesRoot": ".agent-browser/profiles"
     },
+    { "type": "checkpoint", "name": "after-admin-login" },
     { "type": "snapshot" }
   ]
 }
@@ -247,6 +251,20 @@ Visual baseline assert example:
   - `timeout`: resume after `timeoutMs`
   - `enter`: wait for Enter (or timeout fallback)
 - Result metadata includes `pauseSummary` with elapsed time and whether URL/DOM changed during pause.
+
+### Checkpoint action + resume flow
+
+```json
+{
+  "type": "checkpoint",
+  "name": "after-login",
+  "rootDir": ".agent-browser/checkpoints"
+}
+```
+
+- `checkpoint` persists a named session manifest (URL + storage state) for long-run recovery.
+- `run --resume-from-checkpoint <name>` restores that checkpoint and continues with remaining actions.
+- Resume safety: checkpoint manifests are tied to a script content hash and fail fast if the script changed.
 
 ### Loop script format
 
@@ -345,6 +363,8 @@ Common options (available on most execution commands):
 - `--intervention-retention-mode count|severity`
 - `--max-action-attempts <n>`
 - `--retry-backoff-ms <n>`
+- `--resume-from-checkpoint <name>`
+- `--checkpoint-manifest <path>`
 
 ### Stability profiles
 - `fast`: smaller stability windows, quickest runs.
@@ -474,6 +494,5 @@ Implemented now:
 - bounded action auto-retry policy with per-attempt evidence + final rationale in traces
 
 Planned (tracked in `.plan`):
-- checkpoint/resume for long flows
 - cross-site drift monitor and consent/login plugin registry
 - dedicated first-class adapters for OpenCode, Claude Code, OpenAI Codex on top of adapter-stdio

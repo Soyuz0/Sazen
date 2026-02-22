@@ -184,6 +184,16 @@ describe("contracts", () => {
       }
     });
     expect(networkWait.type).toBe("waitFor");
+
+    const checkpointAction = parseAction({
+      type: "checkpoint",
+      name: "after-login",
+      rootDir: ".agent-browser/checkpoints"
+    });
+    expect(checkpointAction.type).toBe("checkpoint");
+    if (checkpointAction.type === "checkpoint") {
+      expect(checkpointAction.name).toBe("after-login");
+    }
   });
 
   it("rejects network_response wait without predicates", () => {

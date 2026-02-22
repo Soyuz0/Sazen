@@ -104,6 +104,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - Implemented network-aware wait primitives (`waitFor` + `network_response`) with URL/method/status/body predicates.
 - Implemented bounded action auto-retry policy with per-attempt evidence and final retry rationale (`maxActionAttempts`, `retryBackoffMs`).
 - Implemented adapter session identity clarity via explicit `adapterSessionId`/`runtimeSessionId`/`runtimeTabId` response fields.
+- Implemented named checkpoint/resume support for long scripts (`checkpoint` action + `run --resume-from-checkpoint`).
 
 ## Validation Strategy
 - Build local fixture app for dogfooding.
@@ -218,7 +219,7 @@ Agent -> Control API -> Orchestrator -> Chromium (Playwright + CDP) -> State/Tra
 - **P1 - Completed: Network-aware wait primitives** via `waitFor.condition.kind = network_response` with URL/method/status/body predicates.
 - **P2 - Completed: Auto-retry with evidence policy** via bounded retries and persisted per-attempt evidence/final rationale in action results, timeline rows, and trace records.
 - **P2 - Completed: Session identity clarity in adapter responses** via explicit `adapterSessionId`, `runtimeSessionId`, and `runtimeTabId` fields while preserving compatibility.
-- **P2 - Checkpoint/resume for long flows (Medium impact, High effort):** named checkpoints in scripts with resume-from-checkpoint support after failures.
+- **P2 - Completed: Checkpoint/resume for long flows** via named `checkpoint` actions, script-hash-safe checkpoint manifests, and `run --resume-from-checkpoint` continuation.
 - **P3 - Cross-site drift monitor (Medium impact, High effort):** aggregate recurring smoke failures and auto-suggest selector strategy updates.
 - **P3 - Consent/login plugin registry (Low-Medium impact, Medium effort):** domain adapters for recurring consent and login patterns discovered in smoke runs. (Partial: consent strategy hooks + site adapters exist; formal plugin registry and login adapters still pending.)
 

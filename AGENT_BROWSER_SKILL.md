@@ -67,6 +67,7 @@ Use timeline HTML presets and diff-only focus mode for long traces when narrowin
 - Use `assert` with `visual_baseline` when step-level screenshot gating is needed.
 - Use `waitFor` with `condition.kind = network_response` when synchronizing on API responses (URL/method/status/body) instead of only DOM heuristics.
 - Use bounded retries (`maxActionAttempts`, `retryBackoffMs`) for transient timeout/network flake; inspect `result.retry` attempt evidence before changing selectors.
+- Use `checkpoint` actions on long scripts and recover with `run --resume-from-checkpoint <name>` when failures occur mid-flow.
 - If strict replay mismatches on public/dynamic pages, retry with relaxed replay + selector invariants.
 - For unstable traces, run `flake` before changing selectors.
 

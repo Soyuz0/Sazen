@@ -317,6 +317,12 @@ export interface MockRouteAction {
   };
 }
 
+export interface CheckpointAction {
+  type: "checkpoint";
+  name: string;
+  rootDir?: string;
+}
+
 export type Action =
   | NavigateAction
   | ClickAction
@@ -330,7 +336,8 @@ export type Action =
   | SnapshotAction
   | SetViewportAction
   | SwitchProfileAction
-  | MockRouteAction;
+  | MockRouteAction
+  | CheckpointAction;
 
 export interface ActionResult {
   actionId: string;
@@ -364,6 +371,10 @@ export interface ActionResult {
     urlChanged: boolean;
     domChanged: boolean;
   };
+  checkpointSummary?: {
+    name: string;
+    manifestPath: string;
+  };
   retry?: RetrySummary;
   error?: {
     message: string;
@@ -394,6 +405,8 @@ export interface TraceRecord {
     retryFinalReason?: RetryFinalReason;
     retryAttemptStatuses?: ActionStatus[];
     retryAttemptDurationsMs?: number[];
+    checkpointName?: string;
+    checkpointManifestPath?: string;
   };
 }
 
@@ -434,6 +447,10 @@ export interface TraceTimelineEntry {
     finalReason: RetryFinalReason;
     attemptStatuses: ActionStatus[];
     attemptDurationsMs: number[];
+  };
+  checkpoint?: {
+    name: string;
+    manifestPath: string;
   };
 }
 

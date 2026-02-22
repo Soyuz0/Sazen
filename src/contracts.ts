@@ -162,6 +162,11 @@ const actionSchemaCore = z.discriminatedUnion("type", [
       body: z.string().optional(),
       json: z.unknown().optional()
     })
+  }),
+  z.object({
+    type: z.literal("checkpoint"),
+    name: z.string().min(1),
+    rootDir: z.string().min(1).optional()
   })
 ]);
 

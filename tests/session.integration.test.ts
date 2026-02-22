@@ -273,6 +273,69 @@ describe("agent session integration", () => {
     }
   }, 120_000);
 
+  it("captures named checkpoints as resumable session manifests", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-checkpoint-"));
+    const checkpointsRoot = join(tempDir, "checkpoints");
+
+    const session = new AgentSession({
+      headed: false,
+      deterministic: true,
+      captureScreenshots: false,
+      artifactsDir: tempDir
+    });
+
+    try {
+      await session.start();
+      const nav = await session.perform({
+        type: "navigate",
+        url: fixture.baseUrl
+      });
+      expect(nav.status).toBe("ok");
+
+      const checkpoint = await session.perform({
+        type: "checkpoint",
+        name: "after-home",
+        rootDir: checkpointsRoot
+      });
+      expect(checkpoint.status).toBe("ok");
+      expect(checkpoint.checkpointSummary?.name).toBe("after-home");
+      expect(checkpoint.checkpointSummary?.manifestPath).toContain("session.json");
+
+      const manifestRaw = await readFile(checkpoint.checkpointSummary?.manifestPath as string, "utf8");
+      const manifest = JSON.parse(manifestRaw) as {
+        name: string;
+        url: string;
+        storageStatePath: string;
+      };
+      expect(manifest.name).toBe("after-home");
+      expect(manifest.url).toContain(fixture.baseUrl);
+      expect(manifest.storageStatePath).toContain("storage-state.json");
+
+      const resumed = new AgentSession({
+        headed: false,
+        deterministic: true,
+        captureScreenshots: false,
+        artifactsDir: tempDir,
+        storageStatePath: manifest.storageStatePath
+      });
+
+      try {
+        await resumed.start();
+        const restore = await resumed.perform({
+          type: "navigate",
+          url: manifest.url,
+          waitUntil: "domcontentloaded"
+        });
+        expect(restore.status).toBe("ok");
+      } finally {
+        await resumed.close();
+      }
+    } finally {
+      await session.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("handles ambiguous role targets by selecting actionable candidates", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "agent-browser-ambiguous-"));
 

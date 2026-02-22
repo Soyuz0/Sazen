@@ -351,7 +351,9 @@ export class AgentSession {
         retryMaxAttempts: result.retry?.maxAttempts,
         retryFinalReason: result.retry?.finalReason,
         retryAttemptStatuses: result.retry?.attempts.map((attempt) => attempt.status),
-        retryAttemptDurationsMs: result.retry?.attempts.map((attempt) => attempt.durationMs)
+        retryAttemptDurationsMs: result.retry?.attempts.map((attempt) => attempt.durationMs),
+        checkpointName: result.checkpointSummary?.name,
+        checkpointManifestPath: result.checkpointSummary?.manifestPath
       }
     });
 
@@ -385,6 +387,12 @@ export class AgentSession {
             attemptStatuses: result.retry.attempts.map((attempt) => attempt.status),
             attemptDurationsMs: result.retry.attempts.map((attempt) => attempt.durationMs)
           }
+        : undefined,
+      checkpoint: result.checkpointSummary
+        ? {
+            name: result.checkpointSummary.name,
+            manifestPath: result.checkpointSummary.manifestPath
+          }
         : undefined
     });
 
@@ -413,6 +421,8 @@ export class AgentSession {
     let resolvedBoundingBox: BoundingBox | undefined;
     let selectorDiagnostics: SelectorDiagnostics | undefined;
     let pauseElapsedMs: number | undefined;
+    let checkpointName: string | undefined;
+    let checkpointManifestPath: string | undefined;
     let error: ActionResult["error"] | undefined;
 
     try {
@@ -421,6 +431,8 @@ export class AgentSession {
       resolvedBoundingBox = execution.resolvedBoundingBox;
       selectorDiagnostics = execution.selectorDiagnostics;
       pauseElapsedMs = execution.pauseElapsedMs;
+      checkpointName = execution.checkpointName;
+      checkpointManifestPath = execution.checkpointManifestPath;
       await this.waitForStability(action, getActionTimeout(action));
       page = this.requirePage();
       observer = this.requireObserver();
@@ -525,6 +537,13 @@ export class AgentSession {
               elapsedMs: pauseElapsedMs ?? finishedAt - startedAt,
               urlChanged: preSnapshot.url !== postSnapshot.url,
               domChanged: postSnapshot.domHash !== preSnapshot.domHash
+            }
+          : undefined,
+      checkpointSummary:
+        action.type === "checkpoint" && checkpointName && checkpointManifestPath
+          ? {
+              name: checkpointName,
+              manifestPath: checkpointManifestPath
             }
           : undefined,
       error
@@ -694,6 +713,8 @@ export class AgentSession {
     resolvedBoundingBox?: BoundingBox;
     pauseElapsedMs?: number;
     selectorDiagnostics?: SelectorDiagnostics;
+    checkpointName?: string;
+    checkpointManifestPath?: string;
   }> {
     const page = this.requirePage();
 
@@ -815,6 +836,17 @@ export class AgentSession {
       case "switchProfile": {
         await this.switchProfile(action);
         return {};
+      }
+
+      case "checkpoint": {
+        const manifestPath = await this.saveSession(
+          action.name,
+          action.rootDir ?? ".agent-browser/checkpoints"
+        );
+        return {
+          checkpointName: action.name,
+          checkpointManifestPath: manifestPath
+        };
       }
 
       case "mock": {
