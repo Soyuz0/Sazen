@@ -65,6 +65,7 @@ configureAdapterStdioCommand(program);
 configureAdapterOpenCodeCommand(program);
 configureAdapterClaudeCodeCommand(program);
 configureAdapterCodexCommand(program);
+configureContextPeekCommand(program);
 configureRunControlCommand(program);
 
 program.parseAsync(process.argv).catch((error: unknown) => {
@@ -1617,6 +1618,63 @@ function configureRunControlCommand(root: Command): void {
           `- interventionJournal trimmed=${response.interventionJournal.trimmed} (high=${response.interventionJournal.trimmedHighImpact}, low=${response.interventionJournal.trimmedLowImpact})`
         );
       }
+    });
+}
+
+function configureContextPeekCommand(root: Command): void {
+  root
+    .command("context-peek")
+    .description("Show latest screenshot context metadata")
+    .option("--context-dir <path>", "Context directory", ".sazen/context")
+    .option("--json", "Print JSON response", false)
+    .action(async (options: Record<string, string | boolean>) => {
+      const contextDir =
+        typeof options.contextDir === "string" && options.contextDir.length > 0
+          ? options.contextDir
+          : ".sazen/context";
+      const manifestPath = resolve(contextDir, "latest.json");
+      const raw = await readFile(manifestPath, "utf8").catch((error) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Context manifest '${manifestPath}' is unavailable: ${reason}`);
+      });
+
+      const manifest = JSON.parse(raw) as {
+        attachedAt?: string;
+        sessionId?: string;
+        actionId?: string;
+        actionType?: string;
+        sourcePath?: string;
+        archivedPath?: string;
+        latestPath?: string;
+        domHash?: string;
+        url?: string;
+        status?: string;
+      };
+
+      if (Boolean(options.json)) {
+        console.log(
+          JSON.stringify(
+            {
+              manifestPath,
+              ...manifest
+            },
+            null,
+            2
+          )
+        );
+        return;
+      }
+
+      console.log(`Context manifest: ${manifestPath}`);
+      console.log(`- attachedAt: ${manifest.attachedAt ?? "(unknown)"}`);
+      console.log(`- action: ${manifest.actionType ?? "(unknown)"} id=${manifest.actionId ?? "(unknown)"}`);
+      console.log(`- sessionId: ${manifest.sessionId ?? "(unknown)"}`);
+      console.log(`- status: ${manifest.status ?? "(unknown)"}`);
+      console.log(`- url: ${manifest.url ?? "(unknown)"}`);
+      console.log(`- domHash: ${manifest.domHash ?? "(unknown)"}`);
+      console.log(`- latestPath: ${manifest.latestPath ?? "(unknown)"}`);
+      console.log(`- sourcePath: ${manifest.sourcePath ?? "(unknown)"}`);
+      console.log(`- archivedPath: ${manifest.archivedPath ?? "(unknown)"}`);
     });
 }
 
